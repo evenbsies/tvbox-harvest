@@ -555,8 +555,11 @@ def purge_cdn(
         wanted = [p.strip().rstrip("/") + "/" for p in paths.split(",") if p.strip()]
         targets = [f for f in files if any(f.startswith(w) for w in wanted)]
     if not targets:
+        # The fallback must match what `generate` actually writes: the direct flavour *is*
+        # index.json. An earlier version listed `index.direct.json`, which nothing produces, so
+        # the one file users actually subscribe to could be skipped on a run whose diff was empty.
         targets = ["data/tvbox/index.json", "data/tvbox/index.gateway.json",
-                   "data/tvbox/index.experimental.json", "data/tvbox/index.direct.json"]
+                   "data/tvbox/index.experimental.json"]
 
     async def _purge() -> list[tuple[str, int]]:
         out: list[tuple[str, int]] = []
