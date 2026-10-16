@@ -509,14 +509,43 @@ def issue_parse(
     _emit(result, github_output)
 
 
+def _github_output_value(value: Any) -> str:
+    """Render a value the way GitHub's `$GITHUB_OUTPUT` format expects it.
+
+    Two conventions matter, and getting either wrong is silent:
+
+    * Booleans must be lowercase. Python renders ``True``, GitHub expressions compare against
+      ``'true'``, and ``'True' != 'true'`` -- so an output written as ``ok=True`` reads as false
+      and every downstream ``if:`` is skipped without error. That is how the entire Issue intake
+      came to acknowledge a submission and then quietly do nothing with it.
+    * Single-line values use ``key=value``; values containing newlines need the delimited
+      heredoc form. A multi-line value written as ``key=value`` keeps only the text before the
+      first newline, so the half of a rejection message that explains *how to fix it* vanished.
+    """
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return str(value)
+
+
+_GH_OUTPUT_DELIMITER = "ghadelimiter"
+
+
 def _emit(result: dict[str, Any], github_output: Path | None) -> None:
-    text = json.dumps(result, ensure_ascii=False)
     if github_output:
         with github_output.open("a", encoding="utf-8") as handle:
             for key, value in result.items():
-                if isinstance(value, (str, int, bool)):
-                    handle.write(f"{key}={value}\n")
-    print(text)
+                if not isinstance(value, (str, int, bool)):
+                    continue
+                text = _github_output_value(value)
+                if "\n" in text or "\r" in text:
+                    # The delimiter must not occur inside the value, or the block ends early.
+                    delimiter = _GH_OUTPUT_DELIMITER
+                    while delimiter in text:
+                        delimiter += "_"
+                    handle.write(f"{key}<<{delimiter}\n{text}\n{delimiter}\n")
+                else:
+                    handle.write(f"{key}={text}\n")
+    print(json.dumps(result, ensure_ascii=False))
 
 
 # --------------------------------------------------------------------------------------
