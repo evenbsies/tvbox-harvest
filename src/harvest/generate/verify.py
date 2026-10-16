@@ -106,11 +106,16 @@ async def _check_remote(
     site_data: SiteData | None,
 ) -> None:
     # --- 1. catalogue ---------------------------------------------------------------
+    # The first record is kept: it is the fallback sample for both the detail and the search
+    # check, so the list response is fetched once instead of once per check.
+    first_item: dict[str, Any] = {}
     try:
         resp = await http.get(api, site=site, params={"ac": "list", "pg": "1"}, tolerate=(403, 404, 500))
         payload = safe_json(resp) if looks_like_json(resp) else None
         items = (payload or {}).get("list") if isinstance(payload, dict) else None
         result.list_ok = bool(resp.status_code == 200 and isinstance(items, list))
+        if isinstance(items, list) and items and isinstance(items[0], dict):
+            first_item = items[0]
         if not result.list_ok:
             result.messages.append(f"ac=list -> HTTP {resp.status_code}, list={type(items).__name__}")
     except Exception as exc:
@@ -121,20 +126,21 @@ async def _check_remote(
         result.status = "failed"
         return
 
-    # --- 2. detail ------------------------------------------------------------------
+    # Sample identity: prefer what we actually harvested, fall back to the source's own first
+    # record. This fallback is what makes the check work in the report job, where the verify
+    # command only has the generated config and no harvest data in hand. Without it the search
+    # check silently did not run -- and still reported the site as "ok".
     sample_id = ""
+    sample_title = ""
     if site_data and site_data.vods:
         sample_id = site_data.vods[0].sid or site_data.vods[0].vid
+        sample_title = site_data.vods[0].name
     if not sample_id:
-        try:
-            resp = await http.get(api, site=site, params={"ac": "list", "pg": "1"}, tolerate=(403, 404))
-            payload = safe_json(resp) if looks_like_json(resp) else None
-            items = (payload or {}).get("list") or []
-            if isinstance(items, list) and items and isinstance(items[0], dict):
-                sample_id = str(items[0].get("vod_id") or "")
-        except Exception:
-            pass
+        sample_id = str(first_item.get("vod_id") or "")
+    if not sample_title:
+        sample_title = str(first_item.get("vod_name") or "")
 
+    # --- 2. detail ------------------------------------------------------------------
     if not sample_id:
         result.status = "failed"
         result.messages.append("no sample id available for detail check")
@@ -158,9 +164,6 @@ async def _check_remote(
         result.messages.append(f"ac=detail raised: {exc}")
 
     # --- 3. search ------------------------------------------------------------------
-    sample_title = ""
-    if site_data and site_data.vods:
-        sample_title = site_data.vods[0].name
     if sample_title:
         try:
             resp = await http.get(api, site=site, params={"wd": sample_title}, tolerate=(403, 404))
@@ -173,7 +176,9 @@ async def _check_remote(
             result.search_ok = False
             result.messages.append(f"wd raised: {exc}")
     else:
+        # Say so rather than leaving a bare None that reads like a pass.
         result.search_ok = None
+        result.messages.append("search not exercised: no sample title available")
 
     if result.list_ok and result.detail_ok:
         result.status = "ok"

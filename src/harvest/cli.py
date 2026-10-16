@@ -26,6 +26,7 @@ from rich.table import Table
 from harvest.config import get_settings
 from harvest.fetch.http import HttpClient
 from harvest.generate import tvbox as tvbox_mod
+from harvest.generate.report import build_run_comment, combine, combined_paths, load_runs
 from harvest.generate.verify import verify_config_file
 from harvest.models import SiteConfig
 from harvest.pipeline import (
@@ -587,6 +588,62 @@ def prune(keep: int = typer.Option(7, "--keep")) -> None:
             old.unlink()
             removed += 1
     console.print(f"pruned {removed} raw files (kept {keep} per site)")
+
+
+@app.command()
+def summary(
+    reports: str = typer.Option("", "--reports", help="Report directory (default: data/reports)"),
+    github_output: str = typer.Option("", "--github-output", help="Append summary= to this file"),
+    markdown: str = typer.Option("", "--markdown", help="Write the combined report here"),
+    comment: str = typer.Option("", "--comment", help="Write the Issue comment body here"),
+    subscribe_url: str = typer.Option("", "--subscribe-url", help="Subscription URL for the comment"),
+) -> None:
+    """Combine one run's per-site reports into a single report and summary line.
+
+    The collect job runs one matrix job per site, so a run's outcome is spread across N report
+    files. Both the run summary and the Issue comment used to read `data/reports/*.json` inline
+    in shell -- and both were consequently empty, because the report files were never uploaded as
+    artifacts to begin with. This command makes the combination explicit, and testable.
+    """
+    settings = get_settings()
+    reports_dir = Path(reports) if reports else settings.reports_dir
+    runs = load_runs(reports_dir)
+
+    if not runs:
+        console.print(f"[yellow]no report files found in {reports_dir}[/yellow]")
+        if github_output:
+            with open(github_output, "a", encoding="utf-8") as handle:
+                handle.write("summary=no report produced\nsites_ok=0\n")
+        raise typer.Exit(code=0)
+
+    combined = combine(runs)
+    data = combined.as_dict()
+    totals = data["summary"]
+
+    summary_path, md_path = combined_paths(settings, combined.started_at)
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    summary_path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    md_path.write_text(combined.to_markdown(), encoding="utf-8")
+
+    line = (
+        f"sites {totals['sites_ok']}/{totals['sites_total']}, "
+        f"vods {totals['vods']}, lines {totals['lines']}, filtered {totals['filtered']}"
+    )
+    console.print(f"[bold]{line}[/bold]")
+
+    if github_output:
+        with open(github_output, "a", encoding="utf-8") as handle:
+            handle.write(f"summary={line}\nsites_ok={totals['sites_ok']}\n")
+
+    if markdown:
+        Path(markdown).parent.mkdir(parents=True, exist_ok=True)
+        Path(markdown).write_text(combined.to_markdown(), encoding="utf-8")
+
+    if comment:
+        Path(comment).parent.mkdir(parents=True, exist_ok=True)
+        Path(comment).write_text(
+            build_run_comment(combined, subscribe_url=subscribe_url), encoding="utf-8"
+        )
 
 
 @app.command()

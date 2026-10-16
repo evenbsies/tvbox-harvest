@@ -146,6 +146,10 @@ jobs:
       - name: Harvest ${{ matrix.site }}
         env:
           SITE_TOKENS: ${{ secrets.SITE_TOKENS }}
+          # One matrix job per site, all writing today's report. Without the tag every job would
+          # write data/reports/<date>.json and all but one would be lost when the artifacts are
+          # merged -- which left both the run summary and the Issue comment with nothing to say.
+          HARVEST_REPORT_TAG: ${{ matrix.site }}
         run: |
           set -euo pipefail
           # `--no-verify`, not `--verify false`: --verify is a flag pair (--verify/--no-verify),
@@ -168,6 +172,8 @@ jobs:
             data/normalized/${{ matrix.site }}.json
             data/snapshot/${{ matrix.site }}
             data/tvbox/sites/${{ matrix.site }}.json
+            data/reports/*.${{ matrix.site }}.json
+            data/reports/*.${{ matrix.site }}.md
             sites/${{ matrix.site }}.yaml
           if-no-files-found: warn
           retention-days: 14
@@ -224,23 +230,7 @@ jobs:
         id: summarise
         run: |
           set -euo pipefail
-          python - <<'PY' >> "$GITHUB_OUTPUT"
-          import json, pathlib, glob
-          files = sorted(glob.glob('data/reports/*.json'))
-          if not files:
-              print("summary=no report produced")
-              print("sites_ok=0")
-              raise SystemExit(0)
-          payload = json.loads(pathlib.Path(files[-1]).read_text())
-          records = payload if isinstance(payload, list) else [payload]
-          last = records[-1]
-          s = last.get('summary', {})
-          text = (f"sites {s.get('sites_ok',0)}/{s.get('sites_total',0)}, "
-                  f"vods {s.get('vods',0)}, lines {s.get('lines',0)}, "
-                  f"filtered {s.get('filtered',0)}")
-          print(f"summary={text}")
-          print(f"sites_ok={s.get('sites_ok',0)}")
-          PY
+          python -m harvest.cli summary --github-output "$GITHUB_OUTPUT"
           echo "::notice::${{ steps.summarise.outputs.summary }}"
 
       - name: Commit and push
@@ -278,30 +268,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p .ci
-          python - <<'PY' > .ci/comment.md
-          import glob, json, pathlib, os
-          text = "采集流程已执行完成。"
-          files = sorted(glob.glob('data/reports/*.json'))
-          if files:
-              payload = json.loads(pathlib.Path(files[-1]).read_text())
-              records = payload if isinstance(payload, list) else [payload]
-              last = records[-1]
-              s = last.get('summary', {})
-              lines = [
-                  "**采集结果**",
-                  "",
-                  f"- 站点：{s.get('sites_ok',0)}/{s.get('sites_total',0)} 成功",
-                  f"- 影片 {s.get('vods',0)} 部 / 线路 {s.get('lines',0)} 条 / 剧集 {s.get('episodes',0)} 集",
-                  f"- 过滤条目 {s.get('filtered',0)}（含博彩命中）",
-              ]
-              problems = [site for site in last.get('sites', []) if site.get('status') not in ('ok', 'snapshot')]
-              if problems:
-                  lines += ["", "**需要关注**", ""]
-                  for site in problems[:5]:
-                      errs = "; ".join(e.get('error','') for e in (site.get('errors') or [])[:2])
-                      lines.append(f"- `{site.get('key')}` 状态 `{site.get('status')}` {errs[:160]}")
-              lines += ["", f"订阅地址：{os.environ.get('SUBSCRIBE_URL','')}"]
-              text = "\n".join(lines)
-          print(text)
-          PY
+          python -m harvest.cli summary \
+            --comment .ci/comment.md \
+            --subscribe-url "$SUBSCRIBE_URL"
           gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file .ci/comment.md

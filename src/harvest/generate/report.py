@@ -42,6 +42,36 @@ class SiteReport:
     def filtered_total(self) -> int:
         return sum(self.filtered.values())
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> SiteReport:
+        """Rebuild a report row from JSON.
+
+        Needed because the workflow harvests sites in parallel and merges their artifacts, so the
+        combined view has to be reconstructed from the per-site files rather than held in memory.
+        Unknown keys are dropped rather than raising: a report written by a newer version must not
+        make an older reader fail.
+        """
+        return cls(
+            key=str(data.get("key") or "?"),
+            name=str(data.get("name") or data.get("key") or "?"),
+            tier=int(data.get("tier") or 0),
+            adapter=str(data.get("adapter") or ""),
+            status=str(data.get("status") or "unknown"),
+            vods=int(data.get("vods") or 0),
+            lines=int(data.get("lines") or 0),
+            episodes=int(data.get("episodes") or 0),
+            filtered={str(k): int(v) for k, v in (data.get("filtered") or {}).items()},
+            bc_hits={str(k): int(v) for k, v in (data.get("bc_hits") or {}).items()},
+            unknown_categories={
+                str(k): int(v) for k, v in (data.get("unknown_categories") or {}).items()
+            },
+            errors=[e for e in (data.get("errors") or []) if isinstance(e, dict)],
+            notes=[str(n) for n in (data.get("notes") or [])],
+            artifacts=[str(a) for a in (data.get("artifacts") or [])],
+            elapsed_ms=int(data.get("elapsed_ms") or 0),
+            per_title=[r for r in (data.get("per_title") or []) if isinstance(r, dict)],
+        )
+
     def as_dict(self) -> dict[str, Any]:
         return {
             "key": self.key,
@@ -211,15 +241,20 @@ def _mark(value: Any) -> str:
         return "ok"
     if value is False:
         return "FAIL"
-    return "-"
+    # None means the check did not run, which is not the same as a missing value: render it as
+    # an explicit "not exercised" so a reader cannot mistake silence for a pass.
+    return "n/a"
 
 
 def write_report(report: RunReport, settings: Settings | None = None) -> tuple[Path, Path]:
     settings = settings or get_settings()
     settings.reports_dir.mkdir(parents=True, exist_ok=True)
     stamp = (report.started_at or utcnow_iso())[:10]
-    json_path = settings.reports_dir / f"{stamp}.json"
-    md_path = settings.reports_dir / f"{stamp}.md"
+    # The suffix keeps parallel per-site jobs from overwriting one another's report when their
+    # artifacts are merged; see Settings.report_tag.
+    suffix = settings.report_suffix
+    json_path = settings.reports_dir / f"{stamp}{suffix}.json"
+    md_path = settings.reports_dir / f"{stamp}{suffix}.md"
 
     existing: list[dict[str, Any]] = []
     if json_path.exists():
@@ -245,31 +280,136 @@ def write_report(report: RunReport, settings: Settings | None = None) -> tuple[P
     return json_path, md_path
 
 
-def build_issue_comment(report: SiteReport, subscribe_url: str = "") -> str:
-    """The condensed summary posted back onto the submitting Issue."""
+def subsites_from_configs(configs: list[SiteConfig]) -> list[str]:
+    return [c.key for c in configs]
+
+
+# -- aggregation ----------------------------------------------------------------------------
+
+
+def _as_run_dicts(payload: Any) -> list[dict[str, Any]]:
+    if isinstance(payload, list):
+        return [r for r in payload if isinstance(r, dict)]
+    if isinstance(payload, dict):
+        return [payload]
+    return []
+
+
+def load_runs(reports_dir: Path) -> list[RunReport]:
+    """Every run record in every report file under ``reports_dir``, oldest first.
+
+    Mind the shape: :func:`write_report` *appends*, so one file can hold several runs, and the
+    workflow writes one file per site. A reader that assumes "one file, one run" silently sees
+    only part of what happened.
+    """
+    runs: list[RunReport] = []
+    for path in sorted(reports_dir.glob("*.json")):
+        # Skip our own output. Reading it back would resurrect rows for sites that a later run
+        # has since dropped, making the summary refuse to shrink.
+        if path.name.endswith(".combined.json"):
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        for record in _as_run_dicts(payload):
+            sites = [s for s in (record.get("sites") or []) if isinstance(s, dict)]
+            run = RunReport(
+                started_at=str(record.get("started_at") or ""),
+                finished_at=record.get("finished_at"),
+                mode=str(record.get("mode") or "full"),
+                run_id=str(record.get("run_id") or ""),
+                sites=[SiteReport.from_dict(s) for s in sites],
+                generated=[g for g in (record.get("generated") or []) if isinstance(g, dict)],
+                verification=[v for v in (record.get("verification") or []) if isinstance(v, dict)],
+                learned_bc_hosts=[str(h) for h in (record.get("learned_bc_hosts") or [])],
+                notes=[str(n) for n in (record.get("notes") or [])],
+            )
+            runs.append(run)
+    return runs
+
+
+def combine(runs: list[RunReport], *, mode: str = "combined") -> RunReport:
+    """Fold many per-site runs into one report: newest row per site, totals summed.
+
+    Newest wins rather than accumulating, because a later run is the current truth about a site --
+    summing would double-count episodes and make a stable site look like it was growing.
+    """
+    latest: dict[str, SiteReport] = {}
+    for run in runs:
+        for site in run.sites:
+            latest[site.key] = site
+
+    ordered = [latest[key] for key in sorted(latest)]
+    combined = RunReport(
+        started_at=min((r.started_at for r in runs if r.started_at), default=utcnow_iso()),
+        finished_at=max((r.finished_at for r in runs if r.finished_at), default=None),
+        mode=mode,
+        sites=ordered,
+    )
+
+    # Verification is per-site as well; keep the newest verdict for each.
+    verdicts: dict[str, dict[str, Any]] = {}
+    for run in runs:
+        for item in run.verification:
+            verdicts[str(item.get("key") or "?")] = item
+    combined.verification = [verdicts[key] for key in sorted(verdicts)]
+
+    seen_hosts: list[str] = []
+    for run in runs:
+        for host in run.learned_bc_hosts:
+            if host not in seen_hosts:
+                seen_hosts.append(host)
+    combined.learned_bc_hosts = seen_hosts
+
+    # Generated-config info is only meaningful from the most recent run, and only once.
+    if runs:
+        combined.generated = runs[-1].generated
+    seen_notes: list[str] = []
+    for run in runs:
+        for note in run.notes:
+            if note not in seen_notes:
+                seen_notes.append(note)
+    combined.notes = seen_notes
+    return combined
+
+
+def combined_paths(settings: Settings, started_at: str = "") -> tuple[Path, Path]:
+    stamp = (started_at or utcnow_iso())[:10]
+    return (
+        settings.reports_dir / f"{stamp}.combined.json",
+        settings.reports_dir / f"{stamp}.combined.md",
+    )
+
+
+def build_run_comment(report: RunReport, subscribe_url: str = "") -> str:
+    """The comment posted on an Issue after its site has been harvested.
+
+    Written in Chinese to match the Issue form, and deliberately blunt about anything that did
+    not go cleanly: a submitter who sees "采集流程已执行完成" with no numbers learns nothing.
+    """
+    data = report.as_dict()
+    totals = data["summary"]
     lines = [
-        f"采集完成：`{report.key}`",
+        "**采集结果**",
         "",
-        f"- 适配器 / 层级：`{report.adapter}` / **T{report.tier}**",
-        f"- 影片 **{report.vods}** 部，线路 **{report.lines}** 条，剧集 **{report.episodes}** 集",
-        f"- 过滤条目 **{report.filtered_total}**（博彩命中 host {sum(report.bc_hits.values())} 次）",
+        f"- 站点：{totals['sites_ok']}/{totals['sites_total']} 成功",
+        f"- 影片 {totals['vods']} 部 / 线路 {totals['lines']} 条 / 剧集 {totals['episodes']} 集",
+        f"- 过滤条目 {totals['filtered']}（含博彩命中）",
     ]
-    if report.status != "ok":
-        lines.append(f"- 状态：**{report.status}**")
-    if report.errors:
-        lines.append(f"- 错误 {len(report.errors)} 条：")
-        lines.extend(f"  - `{e.get('where')}`: {e.get('error')}" for e in report.errors[:5])
-    if report.unknown_categories:
-        top = sorted(report.unknown_categories.items(), key=lambda kv: -kv[1])[:5]
-        lines.append("- 未识别分类（可用于补充映射表）：" + ", ".join(f"`{k}`×{v}" for k, v in top))
-    # Notes explain conditions that look like failure but are answers from the source itself.
-    # They must reach the Issue: the submitter is the one who can act on them.
-    for note in report.notes[:6]:
-        lines.append(f"- {note}")
+
+    problem_sites = [s for s in report.sites if s.status not in ("ok", "snapshot")]
+    if problem_sites:
+        lines += ["", "**需要关注**", ""]
+        for site in problem_sites[:5]:
+            detail = "; ".join(str(e.get("error", "")) for e in site.errors[:2])
+            lines.append(f"- `{site.key}` 状态 `{site.status}` {detail[:160]}".rstrip())
+
+    # Conditions that are answers from the source rather than failures -- a paywall, a budget cap.
+    for site in report.sites:
+        for note in site.notes[:3]:
+            lines.append(f"- `{site.key}`：{note}")
+
     if subscribe_url:
         lines += ["", f"订阅地址：{subscribe_url}"]
     return "\n".join(lines)
-
-
-def subsites_from_configs(configs: list[SiteConfig]) -> list[str]:
-    return [c.key for c in configs]

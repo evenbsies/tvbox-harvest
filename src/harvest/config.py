@@ -53,6 +53,20 @@ class Settings(BaseSettings):
     # Dry run: adapters must not perform network calls when true.
     offline: bool = False
 
+    # Suffix appended to generated report filenames.
+    #
+    # The workflow runs one matrix job per site, and each job writes a report keyed by *date*.
+    # Uploaded as artifacts and merged back together, N jobs would all land on
+    # data/reports/<date>.json and all but one would be lost -- which is how the run summary and
+    # the Issue comment both ended up with nothing to report. Setting this per job keeps the
+    # files distinct so the merge is lossless.
+    report_tag: str = ""
+
+    @property
+    def report_suffix(self) -> str:
+        tag = "".join(c if c.isalnum() or c in "-_" else "-" for c in self.report_tag.strip())
+        return f".{tag}" if tag else ""
+
     @property
     def sites_dir(self) -> Path:
         return self.root / "sites"
