@@ -273,6 +273,10 @@ compliance:
 
 仓库内可直接抄的模板：`sites/example-maccms.yaml`（T1）、`sites/validation-lziapi.yaml`（T1 实测）、`sites/4kvm.yaml`（T4 完整注释）。
 
+> `enabled` 在配方和台账（`sites/registry.yaml`）里各有一份，**采集要求两处都是 `true`**。
+> `harvest probe --save` 与 Issue 表单会自动同步两处；手工改的时候只改一处会让站点停用
+> （停用只需要一处，这是刻意的），但**启用**得改两处，`harvest doctor` 会在不一致时提醒。
+
 ---
 
 ## 仓库结构
@@ -317,7 +321,13 @@ tests/fixtures/    录制的真实响应，离线回归的基准
 
 **为什么我的源没有出现在 index.json？**
 
-三个可能：站点 `enabled: false`（默认如此）；该站是 T3/T4 但没有配网关，因此只进 `index.experimental.json`；或者 `harvest verify` 没过——模拟客户端调用时列表/详情/搜索任一失败，该站本轮不进入主订阅。
+按可能性排序：
+
+1. **站点没启用。** `enabled` 同时写在配方（`sites/<key>.yaml`）和台账（`sites/registry.yaml`）里，**两处都必须是 `true`** 才会采集。默认全是 `false`，空订阅是默认状态。只要有一处不一致，`harvest doctor` 会告诉你。
+2. **该站是 T3/T4 但没配网关**，所以只进 `index.experimental.json` 而不进 `index.json`。
+3. **它这一轮没被采集，并且此前也从未发布过。** 配置由「本轮抓到的数据 + 上一版里已启用站点的条目」合成（carry-over），所以单站运行不会把其他站挤掉；但一个从未成功发布过的站点，本轮又没抓到数据，自然就无处可沿承。
+
+**注意：`harvest verify` 失败不会把站点从订阅里摘掉。** 验证是**告知性**的——一次超时或限流就摘掉一个可用源，比暂时服务一个不可达条目更糟。失败会进入运行报告、运行摘要和 Issue 讨论，让人来判断。要摘掉一个站点，请显式地把它的 `enabled` 改成 `false`。
 
 **为什么 JSON 里 `spider` 是空字符串？**
 

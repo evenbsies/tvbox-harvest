@@ -230,16 +230,32 @@ def generate(
         data = SiteData.model_validate(json.loads(path.read_text(encoding="utf-8")))
         pairs.append((recipe, data))
 
-    if not pairs:
-        console.print("[red]no normalized data found; run `harvest collect` first[/red]")
-        raise typer.Exit(code=1)
-
     # The sites that ought to be in the published config: every enabled registry site. This is
     # the same rule the collect pipeline uses to pick sites, deliberately -- two different
     # notions of "should be published" is how a config ends up disagreeing with the ledger.
     keep: set[str] = set()
     if carry_over:
         keep = {site.key for site in resolve_sites(RunOptions(sites=[], mode="full"), settings)}
+
+    if not pairs:
+        # Nothing fresh on disk. That is the normal outcome of a run in which every site failed,
+        # and the right response is to republish the enabled set from the previous config rather
+        # than to abort. Aborting was worse in two ways: the message ("run `harvest collect`
+        # first") reads like a code defect when the real story is that the sites did not answer,
+        # and the run then never reached its summary or its jsDelivr purge.
+        #
+        # Still an error when there is nothing to carry forward -- a first run with no data is a
+        # genuine mistake, and saying so is more useful than writing an empty subscription.
+        previous_exists = any(
+            (settings.tvbox_dir / name).exists() for name in tvbox_mod.produced_index_files()
+        )
+        if not (keep and previous_exists):
+            console.print("[red]no normalized data found; run `harvest collect` first[/red]")
+            raise typer.Exit(code=1)
+        console.print(
+            "[yellow]no fresh data; republishing the enabled sites from their last published "
+            "entries[/yellow]"
+        )
 
     generated = tvbox_mod.generate_all(
         pairs,
@@ -743,6 +759,16 @@ def doctor(
             errors.append(
                 f"{entry.key}: base_url differs between recipe ({site.base_url}) and "
                 f"registry ({entry.base_url})"
+            )
+        if site.enabled != entry.enabled:
+            # Not an error: harvesting requires both to agree, so the disable already won. But
+            # one of the two files now describes a state that is not in effect, and the ledger is
+            # the file people read to find out what is published.
+            effective = site.enabled and entry.enabled
+            warnings.append(
+                f"{entry.key}: enabled disagrees between recipe ({site.enabled}) and registry "
+                f"({entry.enabled}); harvesting is therefore {effective}. Update the ledger to "
+                f"match the recipe."
             )
         if site.detect.tier is None:
             warnings.append(f"{entry.key}: never probed (collect will probe it on the fly)")

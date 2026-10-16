@@ -373,26 +373,97 @@ def test_cli_generate_drops_a_site_that_was_disabled(
     try:
         assert RUNNER.invoke(app, ["generate", "--flavors", "direct"]).exit_code == 0
 
-        # beta is switched off in both the recipe and the ledger.
-        text = (root / "sites" / "beta.yaml").read_text(encoding="utf-8")
+        # beta is switched off in the recipe; the ledger is left stale on purpose, so this also
+        # shows which of the two the carry-over set is derived from.
         (root / "sites" / "beta.yaml").write_text(
-            text.replace("enabled: true", "enabled: false"), encoding="utf-8"
-        )
-        reg = (root / "sites" / "registry.yaml").read_text(encoding="utf-8")
-        (root / "sites" / "registry.yaml").write_text(
-            reg.replace(
-                "base_url: https://beta.example.test\n  adapter: maccms_v10\n  tier: 1\n  enabled: true",
-                "base_url: https://beta.example.test\n  adapter: maccms_v10\n  tier: 1\n  enabled: false",
-            ),
+            "key: beta\nname: beta\nbase_url: https://beta.example.test\n"
+            "adapter: maccms_v10\nenabled: false\ndetect:\n  tier: 1\n  status: ok\n",
             encoding="utf-8",
         )
-
-        (root / "data" / "normalized" / "alpha.json").unlink()
         (root / "data" / "normalized" / "beta.json").unlink()
         _write_normalized(root, "alpha")
         assert RUNNER.invoke(app, ["generate", "--flavors", "direct"]).exit_code == 0
 
         after = json.loads((root / "data" / "tvbox" / "index.json").read_text(encoding="utf-8"))
-        assert [e["key"] for e in after["sites"]] == ["alpha"]
+        assert [e["key"] for e in after["sites"]] == ["alpha"], (
+            "disabled beta survived in the published subscription"
+        )
+    finally:
+        config.get_settings.cache_clear()
+
+
+def test_a_run_with_no_fresh_data_republishes_instead_of_failing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every site in a run failing must not turn into a crash that looks like a code defect.
+
+    Observed on a real dispatch: the run collected one site that answered nothing, so no
+    normalized data existed. `generate` aborted with "no normalized data found; run `harvest
+    collect` first" -- a message about a missing prerequisite, for a run whose actual story was
+    "the sites did not answer". The report job then died before its summary and its jsDelivr
+    purge, leaving a red run that explained nothing.
+
+    The published subscription was unharmed (nothing was committed), but the run was useless.
+    """
+    import harvest.config as config
+
+    root = _temp_root(tmp_path, enabled={"alpha": True})
+    _write_normalized(root, "alpha")
+
+    monkeypatch.setenv("HARVEST_ROOT", str(root))
+    config.get_settings.cache_clear()
+    try:
+        assert RUNNER.invoke(app, ["generate", "--flavors", "direct"]).exit_code == 0
+        before = json.loads((root / "data" / "tvbox" / "index.json").read_text(encoding="utf-8"))
+
+        # The whole point: no data at all this run.
+        (root / "data" / "normalized" / "alpha.json").unlink()
+        result = RUNNER.invoke(app, ["generate", "--flavors", "direct"])
+
+        assert result.exit_code == 0, result.output
+        after = json.loads((root / "data" / "tvbox" / "index.json").read_text(encoding="utf-8"))
+        assert [e["key"] for e in after["sites"]] == ["alpha"], (
+            "a run with no fresh data emptied the published subscription"
+        )
+        assert after["_carried_over"] == ["alpha"]
+        assert [e["api"] for e in after["sites"]] == [e["api"] for e in before["sites"]]
+    finally:
+        config.get_settings.cache_clear()
+
+
+def test_no_data_and_no_previous_config_is_still_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The error stays for the case where it is genuinely accurate: nothing to build from."""
+    import harvest.config as config
+
+    root = _temp_root(tmp_path, enabled={"alpha": True})  # no normalized data, no config
+
+    monkeypatch.setenv("HARVEST_ROOT", str(root))
+    config.get_settings.cache_clear()
+    try:
+        result = RUNNER.invoke(app, ["generate", "--flavors", "direct"])
+        assert result.exit_code == 1
+        assert "no normalized data" in result.output
+    finally:
+        config.get_settings.cache_clear()
+
+
+def test_no_data_with_data_for_a_disabled_site_only_is_an_error(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Carrying forward nothing must not be dressed up as a successful publish."""
+    import harvest.config as config
+
+    root = _temp_root(tmp_path, enabled={"alpha": False})
+    (root / "data" / "tvbox").mkdir(parents=True, exist_ok=True)
+    (root / "data" / "tvbox" / "index.json").write_text('{"sites": []}', encoding="utf-8")
+
+    monkeypatch.setenv("HARVEST_ROOT", str(root))
+    config.get_settings.cache_clear()
+    try:
+        result = RUNNER.invoke(app, ["generate", "--flavors", "direct"])
+        # alpha is the only site and it is disabled, so the enabled set is empty: nothing to do.
+        assert result.exit_code == 1, result.output
     finally:
         config.get_settings.cache_clear()

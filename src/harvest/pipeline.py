@@ -171,6 +171,24 @@ def save_registry(registry: Registry, settings: Settings | None = None) -> Path:
     return settings.registry_path
 
 
+def _harvest_enabled(site: SiteConfig, ledger: RegistryEntry | None) -> bool:
+    """Whether a site should be harvested, given both places that carry an `enabled` flag.
+
+    Both files are documented as the way to switch a site off -- the recipe in the README's
+    "adding a site" section, the ledger in COMPLIANCE.md's removal flow -- and the code used to
+    consult only the ledger. So setting `enabled: false` in the recipe, which is what the docs
+    describe, had no effect at all: the site kept being fetched.
+
+    Requiring both to agree that a site is on means either edit takes effect. That is the safe
+    direction, because a disable -- including a rights-holder removal -- must never be silently
+    ignored on the grounds that someone updated the other file. Enabling a site by hand therefore
+    needs both, which `doctor` reports if they disagree.
+    """
+    if ledger is not None and not ledger.enabled:
+        return False
+    return site.enabled
+
+
 def resolve_sites(options: RunOptions, settings: Settings) -> list[SiteConfig]:
     """Turn CLI/workflow selectors into concrete recipes."""
     registry = load_registry(settings)
@@ -180,13 +198,6 @@ def resolve_sites(options: RunOptions, settings: Settings) -> list[SiteConfig]:
     for entry in registry.sites:
         if wanted and entry.key not in wanted:
             continue
-        if wanted and not entry.enabled:
-            # An explicitly named site is honoured even when disabled -- that is how a
-            # quarantined or needs-mapping site gets retried by hand.
-            keys.append(entry.key)
-            continue
-        if not wanted and not entry.enabled:
-            continue
         keys.append(entry.key)
 
     for key in sorted(wanted - set(keys)):
@@ -195,16 +206,20 @@ def resolve_sites(options: RunOptions, settings: Settings) -> list[SiteConfig]:
     configs: list[SiteConfig] = []
     for key in keys:
         site = load_recipe(key, settings)
+        ledger = registry.find(key)
         if site is None:
-            registry_entry = registry.find(key)
-            if registry_entry is None:
+            if ledger is None:
                 continue
             site = SiteConfig(
-                key=registry_entry.key,
-                name=registry_entry.name,
-                base_url=registry_entry.base_url,
-                adapter=registry_entry.adapter,
+                key=ledger.key,
+                name=ledger.name,
+                base_url=ledger.base_url,
+                adapter=ledger.adapter,
             )
+        # An explicitly requested site is honoured even when disabled -- that is how a
+        # quarantined or needs-mapping site gets retried by hand.
+        if not wanted and not _harvest_enabled(site, ledger):
+            continue
         if options.tiers and site.tier() not in options.tiers:
             continue
         configs.append(site)

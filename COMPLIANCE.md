@@ -115,13 +115,21 @@ python -m harvest.cli collect --site <key>
 
 使用 [版权 / 删除请求](.github/ISSUE_TEMPLATE/removal-request.yml) 表单。维护者会在 **24 小时内**处理：
 
-1. 在 `sites/registry.yaml` 中把该站点置为 `enabled: false` 并从 `sites/` 移除配方
+1. 把 `sites/<key>.yaml` 与 `sites/registry.yaml` 中该站点置为 `enabled: false`
 2. 把域名加入 `config/blacklist/` 的站点级黑名单
 3. 下一次生成时该站点从所有订阅产物中消失
 
 **方式二：Fork 后自行删除**
 
 项目的所有产物都由配方文件**确定性重建**。删除 `sites/<key>.yaml` 与 `sites/registry.yaml` 中对应条目，再跑一次 `harvest generate`，该站点的所有痕迹即从产物中消失。不存在需要人工清理的隐藏状态。
+
+**关于 `enabled` 的一个必要说明**
+
+`enabled` 同时存在于配方（`sites/<key>.yaml`）和台账（`sites/registry.yaml`）两处，而**采集要求两处都同意该站点开启**。
+
+这是刻意选择的失败方向：只要改任意一处为 `false`，该站点立即停止采集。移除请求最不能接受的结局是「因为另一个文件还写着 true 而被静默忽略」，所以停用只需要一次编辑。反过来，手工**启用**一个站点需要两处都改（通过 Issue 表单或 `harvest probe --save` 添加的站点会自动同步两处）。两处不一致时 `harvest doctor` 会给出警告，让你知道台账已经与现实脱节。
+
+注意 `enabled` 不属于「机器所有」的字段：写回探测结果时不会覆盖它，所以一次例行探测不会把你停用的站点重新打开。
 
 ---
 
