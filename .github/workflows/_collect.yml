@@ -230,11 +230,13 @@ jobs:
         id: summarise
         run: |
           set -euo pipefail
-          # Capture stdout into a shell variable and expand it with the shell, not with `${{ }}`.
-          # A step cannot read its own `steps.<id>.outputs`: expressions in `run` are evaluated as
-          # the step starts, before it has written them. The original
-          # `echo "::notice::${{ steps.summarise.outputs.summary }}"` therefore always emitted an
-          # empty notice.
+          # Capture stdout into a shell variable and let the shell expand it. A step cannot read
+          # its own step outputs: GitHub expands expression syntax in `run` as the step starts,
+          # before that step has written anything, so the notice was always blank.
+          #
+          # Do not write literal expression braces in these comments. GitHub evaluates them even
+          # inside shell comments, and an empty pair is a hard syntax error that makes the whole
+          # workflow file fail to load.
           line=$(python -m harvest.cli summary --github-output "$GITHUB_OUTPUT")
           echo "::notice::$line"
 

@@ -144,6 +144,68 @@ def test_comment_only_mentions_are_not_treated_as_code() -> None:
     assert _self_referencing_steps(documented) == []
 
 
+# -- expression syntax ------------------------------------------------------------------------
+#
+# This is the one check that must NOT skip comments. GitHub expands `${{ ... }}` anywhere in a
+# `run` value, comments included -- YAML block scalars carry comments through as ordinary text.
+#
+# It caught a real breakage: a comment reading
+#
+#     # expand it with the shell, not with `${{ }}`
+#
+# made GitHub reject the entire workflow file with "An expression was expected". An empty pair is
+# not prose; it is a syntax error, and the failure mode is that the workflow silently stops
+# existing -- `gh workflow run` refused, and a 0-second run named after the file appeared.
+
+_EXPRESSION_RE = re.compile(r"\$\{\{(.*?)\}\}", re.DOTALL)
+
+
+def _expression_problems(path: Path) -> list[str]:
+    problems: list[str] = []
+    text = path.read_text(encoding="utf-8")
+
+    # Unbalanced: an opening pair with no closing one.
+    opens = text.count("${{")
+    closes = text.count("}}")
+    if opens > closes:
+        problems.append(f"{path.name}: {opens} '{{{{' but only {closes} '}}}}'")
+
+    for match in _EXPRESSION_RE.finditer(text):
+        if not match.group(1).strip():
+            line = text[: match.start()].count("\n") + 1
+            problems.append(f"{path.name}:{line}: empty expression pair")
+    return problems
+
+
+@pytest.mark.parametrize("path", WORKFLOWS, ids=[p.name for p in WORKFLOWS])
+def test_no_malformed_expressions_anywhere_not_even_in_comments(path: Path) -> None:
+    problems = _expression_problems(path)
+
+    assert not problems, "GitHub will refuse to load this workflow:\n" + "\n".join(problems)
+
+
+def test_the_expression_check_can_actually_fail(tmp_path: Path) -> None:
+    """A check that cannot fail is not a check."""
+    broken = tmp_path / "broken.yml"
+    broken.write_text(
+        "jobs:\n  a:\n    steps:\n      - run: |\n          # expand with `${{ }}`\n",
+        encoding="utf-8",
+    )
+    assert _expression_problems(broken), "empty expression pair not detected"
+
+    unbalanced = tmp_path / "unbalanced.yml"
+    unbalanced.write_text(
+        "jobs:\n  a:\n    steps:\n      - run: echo '${{ github.sha }'\n", encoding="utf-8"
+    )
+    assert _expression_problems(unbalanced), "unbalanced braces not detected"
+
+    fine = tmp_path / "fine.yml"
+    fine.write_text(
+        "jobs:\n  a:\n    steps:\n      - run: echo '${{ github.sha }}'\n", encoding="utf-8"
+    )
+    assert _expression_problems(fine) == []
+
+
 @pytest.mark.parametrize("path", WORKFLOWS, ids=[p.name for p in WORKFLOWS])
 def test_step_outputs_are_only_read_by_steps_that_declare_an_id(path: Path) -> None:
     """An output written by a step with no `id:` can never be referenced."""
