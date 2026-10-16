@@ -1,0 +1,31 @@
+{
+  "sites": [
+    {
+      "key": "validation-lziapi",
+      "name": "采集接口验证站",
+      "type": 1,
+      "api": "https://cj.lziapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    }
+  ],
+  "lives": [],
+  "parses": [],
+  "flags": [],
+  "rules": [],
+  "spider": "",
+  "author": "tvbox-harvest",
+  "wallpaper": "",
+  "ua": "",
+  "requestHeader": {},
+  "version": "experimental-38932437617",
+  "generated_at": "2026-10-16T16:31:48+00:00",
+  "generated_by": "tvbox-harvest"
+}
