@@ -555,11 +555,11 @@ def purge_cdn(
         wanted = [p.strip().rstrip("/") + "/" for p in paths.split(",") if p.strip()]
         targets = [f for f in files if any(f.startswith(w) for w in wanted)]
     if not targets:
-        # The fallback must match what `generate` actually writes: the direct flavour *is*
-        # index.json. An earlier version listed `index.direct.json`, which nothing produces, so
-        # the one file users actually subscribe to could be skipped on a run whose diff was empty.
-        targets = ["data/tvbox/index.json", "data/tvbox/index.gateway.json",
-                   "data/tvbox/index.experimental.json"]
+        # Derived from the same list `generate` writes from, so the two cannot disagree. An
+        # earlier version hardcoded these names and drifted twice: it named `index.direct.json`
+        # as if it were stale (it is a real artefact), then omitted it after that mistake was
+        # half-corrected. Either way a subscriber keeps a cached copy for up to 12 hours.
+        targets = tvbox_mod.default_purge_targets()
 
     async def _purge() -> list[tuple[str, int]]:
         out: list[tuple[str, int]] = []

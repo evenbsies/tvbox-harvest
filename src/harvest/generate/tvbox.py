@@ -36,6 +36,32 @@ FLAVOR_FILES = {
     "experimental": "index.experimental.json",
 }
 
+# A byte-identical copy of the direct entry point under a self-describing name, for users who
+# prefer an explicit "not the gateway build" filename. It is a real artefact written on every
+# run -- it was once mistaken for a stale leftover and dropped from the jsDelivr purge list,
+# which would have left that copy un-refreshed for up to 12 hours.
+DIRECT_ALIAS_FILE = "index.direct.json"
+
+
+def produced_index_files() -> tuple[str, ...]:
+    """Every file `generate_all` writes into `data/tvbox/`, as bare filenames.
+
+    Single source of truth for "what is a generated entry point". Anything that needs to
+    enumerate them -- the jsDelivr purge list, its regression test -- reads this instead of
+    restating the names, which is how the two drifted apart before.
+    """
+    return (*FLAVOR_FILES.values(), DIRECT_ALIAS_FILE)
+
+
+def default_purge_targets() -> list[str]:
+    """Repo-relative paths of the generated entry points, for cache invalidation.
+
+    Used when a run's git diff is empty and there is nothing to infer targets from. Derived
+    rather than hardcoded: a hardcoded copy had already drifted from reality twice, and both
+    times the consequence was a stale subscription served from jsDelivr's 12-hour branch cache.
+    """
+    return [f"data/tvbox/{name}" for name in produced_index_files()]
+
 
 @dataclass
 class GeneratedConfig:
@@ -213,6 +239,6 @@ def generate_all(
     # when they have not deployed a gateway, so keep it present even when it duplicates.
     direct_path = tvbox_dir / "index.json"
     if direct_path.exists():
-        (tvbox_dir / "index.direct.json").write_bytes(direct_path.read_bytes())
+        (tvbox_dir / DIRECT_ALIAS_FILE).write_bytes(direct_path.read_bytes())
 
     return out
