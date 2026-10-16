@@ -445,6 +445,42 @@ def validate_public_url(url: str) -> tuple[bool, str]:
     return True, url
 
 
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", (text or "").lower()).strip("-")
+
+
+def _recipe_key(name: str, host: str, base_url: str, taken: set[str]) -> str:
+    """A recipe key: ASCII, stable, and never colliding with an existing site.
+
+    The form asks for a site name in the operator's own language, so the name is usually not
+    ASCII at all. Slugifying it therefore yields nothing, and the previous implementation fell
+    back to the constant ``"site"`` -- which is how a submission of ``cj.lziapi.com`` named
+    "采集接口验证站" was registered under the key ``site``. Every Chinese-named submission would
+    have received that same key, so each new one would have overwritten the last, and the error
+    would only have shown up as a site mysteriously disappearing.
+
+    So: try the name, then the host, then a hash of the URL, and if the result is already taken
+    by a *different* origin, disambiguate. Deterministic throughout, because the key names the
+    recipe file and the snapshot directory.
+    """
+    import hashlib  # noqa: PLC0415 -- only needed here, keeps the module's import list honest
+
+    for candidate in (_slug(name), _slug(host.replace("www.", "")), _slug(host)):
+        if candidate:
+            key = candidate[:40].strip("-")
+            break
+    else:
+        # No usable ASCII anywhere: the host is non-ASCII too (an IDN). Hash the origin.
+        key = "site-" + hashlib.sha1(base_url.encode("utf-8")).hexdigest()[:8]
+
+    unique = key
+    suffix = 2
+    while unique in taken:
+        unique = f"{key[:36]}-{suffix}"
+        suffix += 1
+    return unique
+
+
 @app.command("issue-parse")
 def issue_parse(
     body_env: str = typer.Option("ISSUE_BODY", "--body-env"),
@@ -482,30 +518,35 @@ def issue_parse(
     url = url_or_error
     adapter = ADAPTER_MAP.get(fields.get("adapter", "auto").strip().lower(), "auto")
 
+    from urllib.parse import urlparse
+
     from harvest.probe.detector import normalize_base_url
 
     base = normalize_base_url(url)
-    from urllib.parse import urlparse
-
     host = urlparse(base).hostname or ""
-    key = re.sub(r"[^a-z0-9]+", "-", (fields.get("site_name") or host.replace("www.", "")).lower()).strip("-")
-    key = key or "site"
-    key = key[:40]
 
     registry = load_registry(settings)
-    existing = registry.find(key)
-    if existing is not None:
-        last = (existing.last_run or {}).get("at", "未知")
-        result.update(
-            {
-                "ok": True,
-                "key": existing.key,
-                "duplicate": True,
-                "message": f"该站点已收录（key=`{existing.key}`），上次采集时间：{last}。无需重复提交。",
-            }
-        )
-        _emit(result, github_output)
-        return
+
+    # Duplicate detection is by *origin*, not by the derived name. Keying it on the key meant the
+    # same site resubmitted under a different display name was registered a second time -- and
+    # then both entries were harvested and published, because nothing else compares base URLs.
+    for entry in registry.sites:
+        if normalize_base_url(entry.base_url) == base:
+            last = (entry.last_run or {}).get("at", "未知")
+            result.update(
+                {
+                    "ok": True,
+                    "key": entry.key,
+                    "duplicate": True,
+                    "message": (
+                        f"该站点已收录（key=`{entry.key}`），上次采集时间：{last}。无需重复提交。"
+                    ),
+                }
+            )
+            _emit(result, github_output)
+            return
+
+    key = _recipe_key(fields.get("site_name", ""), host, base, {e.key for e in registry.sites})
 
     today = __import__("datetime").date.today().isoformat()
     today_count = sum(

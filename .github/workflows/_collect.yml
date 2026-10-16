@@ -70,6 +70,19 @@ jobs:
       count: ${{ steps.build.outputs.count }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Check out the tip of the triggering branch, not the SHA the event fired on.
+          #
+          # `actions/checkout` defaults to `github.sha`, which for an `issues` event is the
+          # default branch as it stood *when the event fired*. The intake job then commits the
+          # new recipe, so the jobs downstream were reading a tree without it: `harvest` ran
+          # `plan --sites <new key>`, found nothing, produced an empty matrix, and skipped
+          # collection entirely. The submitter was told "自动采集未成功" for a site the pipeline
+          # never attempted.
+          #
+          # It also made a second run on the same issue re-create a recipe that already existed
+          # upstream and then fail on `git pull --rebase`.
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -117,6 +130,19 @@ jobs:
       matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Check out the tip of the triggering branch, not the SHA the event fired on.
+          #
+          # `actions/checkout` defaults to `github.sha`, which for an `issues` event is the
+          # default branch as it stood *when the event fired*. The intake job then commits the
+          # new recipe, so the jobs downstream were reading a tree without it: `harvest` ran
+          # `plan --sites <new key>`, found nothing, produced an empty matrix, and skipped
+          # collection entirely. The submitter was told "自动采集未成功" for a site the pipeline
+          # never attempted.
+          #
+          # It also made a second run on the same issue re-create a recipe that already existed
+          # upstream and then fail on `git pull --rebase`.
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:
@@ -187,6 +213,19 @@ jobs:
       sites_ok: ${{ steps.summarise.outputs.sites_ok }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Check out the tip of the triggering branch, not the SHA the event fired on.
+          #
+          # `actions/checkout` defaults to `github.sha`, which for an `issues` event is the
+          # default branch as it stood *when the event fired*. The intake job then commits the
+          # new recipe, so the jobs downstream were reading a tree without it: `harvest` ran
+          # `plan --sites <new key>`, found nothing, produced an empty matrix, and skipped
+          # collection entirely. The submitter was told "自动采集未成功" for a site the pipeline
+          # never attempted.
+          #
+          # It also made a second run on the same issue re-create a recipe that already existed
+          # upstream and then fail on `git pull --rebase`.
+          ref: ${{ github.ref_name }}
 
       - uses: actions/setup-python@v5
         with:

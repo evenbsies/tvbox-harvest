@@ -239,3 +239,117 @@ def test_emitted_json_on_stdout_is_machine_readable(
     payload = json.loads(result.output.strip().splitlines()[-1])
     assert payload["ok"] is True
     assert payload["key"]
+
+
+# -- recipe keys -------------------------------------------------------------------------------
+#
+# Found by submitting a real issue: the form asks for a site name in the operator's language, so
+# the name is normally Chinese, which slugifies to nothing. The code then fell back to the
+# constant "site" -- and a submission of cj.lziapi.com named "采集接口验证站" was registered under
+# the key `site`. Every such submission would have received that same key, so each would have
+# overwritten the previous one, showing up only as a site mysteriously disappearing.
+
+
+def _body(url: str, name: str) -> str:
+    return f"### 站点地址\n\n{url}\n\n### 站点名称\n\n{name}\n\n### 适配器类型\n\n自动探测\n"
+
+
+def test_a_chinese_name_does_not_become_the_constant_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outputs = _run_issue_parse(tmp_path, _body("https://cj.example.com/", "采集接口验证站"), monkeypatch)
+
+    assert outputs["ok"] == "true"
+    assert outputs["key"] != "site", "the key fell back to a constant that every site would share"
+    # The host is the only ASCII material available, so that is what the key should come from.
+    assert "example" in outputs["key"], outputs["key"]
+
+
+def test_two_differently_named_chinese_sites_get_different_keys(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    first = _run_issue_parse(tmp_path / "a", _body("https://aaa.example.com/", "影视一"), monkeypatch)
+    second = _run_issue_parse(tmp_path / "b", _body("https://bbb.example.com/", "影视二"), monkeypatch)
+
+    assert first["key"] != second["key"], (
+        f"both submissions got the key {first['key']!r}; the second would overwrite the first"
+    )
+    assert (tmp_path / "a" / "sites" / f"{first['key']}.yaml").is_file()
+    assert (tmp_path / "b" / "sites" / f"{second['key']}.yaml").is_file()
+
+
+def test_an_ascii_name_is_preferred_over_the_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Operators recognise their own names, so use them when they are usable."""
+    outputs = _run_issue_parse(
+        tmp_path, _body("https://cdn.example.com/", "My Cinema"), monkeypatch
+    )
+
+    assert outputs["key"] == "my-cinema", outputs["key"]
+
+
+def test_the_same_origin_under_a_different_name_is_a_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Duplicate detection has to compare origins.
+
+    Keying it on the derived name meant the same site resubmitted under another display name was
+    registered twice, and nothing else compares base URLs -- so both entries would be harvested
+    and published.
+    """
+    _run_issue_parse(tmp_path, _body("https://same.example.com/", "影视一"), monkeypatch)
+    again = _run_issue_parse(tmp_path, _body("https://same.example.com/", "完全不同的名字"), monkeypatch)
+
+    assert again["duplicate"] == "true", "the same origin was registered twice"
+    assert "已收录" in again["message"]
+
+
+def test_a_trailing_slash_does_not_defeat_duplicate_detection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _run_issue_parse(tmp_path, _body("https://same.example.com/", "影视一"), monkeypatch)
+    again = _run_issue_parse(tmp_path, _body("https://same.example.com", "影视一"), monkeypatch)
+
+    assert again["duplicate"] == "true"
+
+
+def test_a_second_site_on_another_host_is_not_a_duplicate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Guard the other direction: duplicate detection must not be so eager it blocks new sites."""
+    _run_issue_parse(tmp_path, _body("https://one.example.com/", "站一"), monkeypatch)
+    second = _run_issue_parse(tmp_path, _body("https://two.example.com/", "站二"), monkeypatch)
+
+    assert second.get("duplicate", "false") != "true"
+    assert second["ok"] == "true"
+
+
+def test_a_key_collision_is_disambiguated(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Two origins with the same ASCII slug must not share a recipe file."""
+    first = _run_issue_parse(tmp_path, _body("https://site.example.com/", "name"), monkeypatch)
+    # A different host that slugs to the same thing is impossible here, so force the collision by
+    # seeding the registry with the derived key pointing at another origin.
+    import yaml as _yaml
+
+    registry_path = tmp_path / "sites" / "registry.yaml"
+    doc = _yaml.safe_load(registry_path.read_text(encoding="utf-8"))
+    doc["sites"].append(
+        {
+            "key": f"{first['key']}-x",
+            "name": "x",
+            "base_url": "https://elsewhere.example.net",
+            "adapter": "auto",
+            "enabled": True,
+            "origin": {"type": "manual"},
+            "last_run": {},
+        }
+    )
+    registry_path.write_text(_yaml.safe_dump(doc, allow_unicode=True), encoding="utf-8")
+
+    second = _run_issue_parse(tmp_path, _body("https://other.example.com/", "name"), monkeypatch)
+
+    assert second["key"] != first["key"]
+    assert (tmp_path / "sites" / f"{second['key']}.yaml").is_file()

@@ -48,14 +48,3 @@ sites:
     vods: 3
     lines: 3
     filtered: 0
-- key: site
-  name: 采集接口验证站
-  base_url: https://cj.lziapi.com
-  adapter: auto
-  tier: 0
-  enabled: true
-  origin:
-    type: issue
-    issue: 1
-    at: '2026-10-16T17:15:02+00:00'
-  last_run: {}

@@ -391,3 +391,45 @@ def test_a_failing_label_does_not_skip_the_issue_close() -> None:
         assert "||" in line, (
             f"an unguarded label edit under `set -e` aborts the rest of the step: {line.strip()}"
         )
+
+
+# -- checkout ref -------------------------------------------------------------------------------
+#
+# A job that acts on state a *previous job in the same run* just committed must check out the
+# branch tip. `actions/checkout` defaults to `github.sha`, which for an `issues` event is the
+# default branch as it stood when the event fired -- so the recipe the intake job had just
+# committed was not in the tree the next job read.
+#
+# Observed end to end: the intake job registered `sites/site.yaml` and pushed it, then the harvest
+# job ran `plan --sites site`, found nothing, emitted `{"include": []}`, and skipped collection.
+# The submitter's Issue said "自动采集未成功" for a site the pipeline never even attempted. A
+# second run on the same Issue re-created the recipe and then failed on `git pull --rebase`.
+
+#: Workflows whose jobs consume a commit made earlier in the same run.
+SEQUENTIAL_WORKFLOWS = ("_collect.yml", "issue.yml")
+
+
+@pytest.mark.parametrize("filename", SEQUENTIAL_WORKFLOWS)
+def test_checkouts_use_the_branch_tip(filename: str) -> None:
+    steps = [step for _, step in _steps(WORKFLOW_DIR / filename)]
+    checkouts = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")]
+
+    assert checkouts, f"{filename} has no checkout"
+    for step in checkouts:
+        ref = (step.get("with") or {}).get("ref")
+        assert ref == "${{ github.ref_name }}", (
+            f"{filename}: a checkout does not pin `ref`, so it uses the event SHA. Jobs that read "
+            f"a commit made earlier in the same run would see the wrong tree (found ref={ref!r})"
+        )
+
+
+def test_the_checkout_rule_is_scoped_to_the_sequential_workflows() -> None:
+    """`validate` deliberately checks out the pushed commit, so it must not be pinned."""
+    steps = [step for _, step in _steps(WORKFLOW_DIR / "validate.yml")]
+    checkouts = [s for s in steps if str(s.get("uses", "")).startswith("actions/checkout")]
+
+    assert checkouts
+    for step in checkouts:
+        assert (step.get("with") or {}).get("ref") is None, (
+            "validate.yml pins a ref; it exists to check the commit that was pushed"
+        )
