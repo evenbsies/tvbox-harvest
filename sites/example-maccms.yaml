@@ -19,8 +19,7 @@ compliance:
 
 request:
   headers:
-    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0
-      Safari/537.36"
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
     Referer: "{base_url}/"
     Accept-Language: "zh-CN,zh;q=0.9"
   rate_limit: 1.0          # requests per second; the global ceiling is 2.0
@@ -33,7 +32,7 @@ auth:
   type: none               # none | token | md5_sign
   # For token/sign sites the value is read from an environment variable named here --
   # never put a credential in a recipe file, it would end up in git history.
-  token_secret:
+  token_secret: null
   token_query_name: token
 
 maccms:
@@ -51,10 +50,4 @@ tvbox:
   filterable: 1
   playerType: 2
 
-detect:
-  version: 1
-  stale: false
-  evidence: {}
-browser: {}
-selectors: {}
-probe: {}
+detect: {}

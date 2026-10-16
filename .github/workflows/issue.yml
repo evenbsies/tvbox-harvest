@@ -22,7 +22,17 @@ concurrency:
 jobs:
   intake:
     # Only the site-request form is handled here; removal requests are handled by a human.
-    if: contains(github.event.issue.labels.*.name, 'site-request')
+    #
+    # The label is the primary signal, but it is *repository state*: labels are not files, so a
+    # fork does not necessarily carry them, and a missing `site-request` label silently disables
+    # the project's headline feature -- the workflow just never fires. This repository had none
+    # of the four labels it depends on, so the fallback below is not hypothetical.
+    #
+    # The fallback keys off the form's own field heading, which *is* a file the fork has. A body
+    # containing `### 站点地址` came from add-site.yml; a removal request has its own template.
+    if: >-
+      contains(github.event.issue.labels.*.name, 'site-request') ||
+      contains(github.event.issue.body, '### 站点地址')
     runs-on: ubuntu-latest
     outputs:
       ok: ${{ steps.parse.outputs.ok }}
@@ -109,11 +119,26 @@ jobs:
           SITES_OK: ${{ needs.harvest.outputs.sites_ok }}
         run: |
           set -euo pipefail
+
+          # Labels are repo state, so they can be absent -- in a fork, or in a repository that
+          # never ran the one-time setup. Create them on demand rather than let a missing label
+          # decide the outcome of an intake. `--force` makes this idempotent.
+          ensure_label() {
+            gh label create "$1" --repo "$REPO" --color "$2" --description "$3" --force >/dev/null 2>&1 || \
+              echo "::warning::could not create label $1"
+          }
+
           if [ "${SITES_OK:-0}" -gt 0 ]; then
-            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label collected
+            ensure_label collected 1d76db "已成功采集并加入订阅"
+            # Labelling is cosmetic; closing the issue is the point. A failed `gh label create`
+            # must not abort the script before the close, which is what `set -e` did before.
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label collected || \
+              echo "::warning::could not add label 'collected'"
             gh issue close "$ISSUE_NUMBER" --repo "$REPO" --comment "采集成功，已加入订阅。"
           else
-            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label needs-manual
+            ensure_label needs-manual fbca04 "自动采集失败，需人工补充配置"
+            gh issue edit "$ISSUE_NUMBER" --repo "$REPO" --add-label needs-manual || \
+              echo "::warning::could not add label 'needs-manual'"
             gh issue comment "$ISSUE_NUMBER" --repo "$REPO" \
               --body "自动采集未成功，已标记为 needs-manual。通常需要人工补充接口路径或选择器映射（见 sites/*.yaml），补齐后可在 Actions 页面手动触发 workflow_dispatch 重试。"
           fi

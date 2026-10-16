@@ -270,3 +270,124 @@ def test_third_party_actions_are_version_pinned(path: Path) -> None:
         assert ref not in ("main", "master"), (
             f"{path.name}:{job_name}: {uses} tracks a moving branch"
         )
+
+
+# -- labels -----------------------------------------------------------------------------------
+#
+# Labels are *repository state*, not files. A workflow that gates on a label therefore depends on
+# something a fork does not necessarily have, and nothing local can notice the gap. This
+# repository had none of the four labels its own templates and workflows referred to -- including
+# `site-request`, which is the gate on the entire Issue intake path. If GitHub had not created it
+# from the template, the project's headline feature would simply never have fired, with no error
+# anywhere.
+#
+# So: every label a template or workflow names must be created by something in the repository, and
+# the intake gate must not rest on the label alone.
+
+TEMPLATE_DIR = WORKFLOW_DIR.parent / "ISSUE_TEMPLATE"
+
+
+def _template_labels() -> dict[str, set[str]]:
+    """label name -> the template files that declare it."""
+    found: dict[str, set[str]] = {}
+    for path in sorted(TEMPLATE_DIR.glob("*.yml")):
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        for label in doc.get("labels") or []:
+            found.setdefault(str(label), set()).add(path.name)
+    return found
+
+
+def _workflow_text() -> str:
+    return "\n".join(p.read_text(encoding="utf-8") for p in WORKFLOWS)
+
+
+def _readme_text() -> str:
+    return (WORKFLOW_DIR.parents[1] / "README.md").read_text(encoding="utf-8")
+
+
+def _labels_applied_by_workflows() -> set[str]:
+    """Label names the workflows attach to issues."""
+    found: set[str] = set()
+    for path in WORKFLOWS:
+        for _, step in _steps(path):
+            run = step.get("run")
+            if not isinstance(run, str):
+                continue
+            found.update(re.findall(r"--add-label\s+\"?([A-Za-z0-9:_-]+)", run))
+    return found
+
+
+def test_templates_declare_labels() -> None:
+    """Guard against the extraction breaking and the checks below passing vacuously."""
+    assert _template_labels(), "no labels declared by any issue template"
+
+
+def test_there_are_labels_to_check() -> None:
+    assert _labels_applied_by_workflows(), "no labels are applied by any workflow"
+
+
+@pytest.mark.parametrize(
+    "label", sorted(set(_template_labels()) | {"collected", "needs-manual"})
+)
+def test_every_referenced_label_is_created_or_documented(label: str) -> None:
+    """A label nothing creates and nothing documents is a label that will be missing.
+
+    This repository referred to four labels and had none of them, because GitHub's defaults were
+    all it shipped with. The gate on the Issue intake path is one of those labels, so the whole
+    feature was one missing label away from never firing.
+
+    A label counts as handled if automation creates it (`gh label create` / the workflow's
+    `ensure_label` helper) or if the README gives the operator a one-time command. Labels are
+    repository state, so *someone* has to create them -- the only question is whether it is
+    written down.
+    """
+    automation = _workflow_text()
+    docs = _readme_text()
+
+    created_by_ci = (
+        f'label create "{label}"' in automation
+        or f"label create {label}" in automation
+        or bool(re.search(rf"ensure_label\s+{re.escape(label)}\b", automation))
+    )
+    documented = f"gh label create {label}" in docs or f"gh label create \"{label}\"" in docs
+
+    assert created_by_ci or documented, (
+        f"label {label!r} is used by a template or workflow but nothing creates it and the "
+        f"README does not document how. It will be missing in a fresh fork."
+    )
+
+
+def test_the_intake_gate_does_not_rest_on_a_label_alone() -> None:
+    """The fallback is what makes the intake work in a fork that has no labels yet."""
+    doc = _doc(WORKFLOW_DIR / "issue.yml")
+    condition = (doc.get("jobs") or {}).get("intake", {}).get("if")
+
+    assert condition, "the intake job has no condition"
+    assert "site-request" in condition, "the label signal was dropped"
+    assert "站点地址" in condition, (
+        "the intake gate only looks at a label; a fork without that label would never process a "
+        "submission and nothing would report the gap"
+    )
+
+
+def test_a_failing_label_does_not_skip_the_issue_close() -> None:
+    """`set -e` plus a missing label used to abort before `gh issue close`.
+
+    The observable outcome was a successfully harvested site leaving its Issue open and
+    unlabelled -- the acknowledgement said "已受理" and then the trail stopped.
+    """
+    steps = [
+        step
+        for _, step in _steps(WORKFLOW_DIR / "issue.yml")
+        if isinstance(step.get("run"), str) and "gh issue close" in step["run"]
+    ]
+    assert steps, "no step closes the issue"
+
+    script = steps[0]["run"]
+    label_lines = [ln for ln in script.splitlines() if "--add-label" in ln]
+
+    assert label_lines, "the close step no longer labels the issue"
+    for line in label_lines:
+        assert "||" in line, (
+            f"an unguarded label edit under `set -e` aborts the rest of the step: {line.strip()}"
+        )

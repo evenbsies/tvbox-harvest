@@ -315,6 +315,21 @@ tests/fixtures/    录制的真实响应，离线回归的基准
 - **jsDelivr 分支缓存默认 12 小时**。push 之后必须调用 `purge.jsdelivr.net`，否则用户最长 12 小时看不到新源——pipeline 看起来"坏了"，其实一直在正常工作。所以 purge 是必需步骤，不是优化项。
 - **Issue body 是不可信输入**。它以环境变量传入 Python，绝不做 shell 插值；只有通过 `validate_public_url`（拒绝内网/回环/链路本地地址）的 URL 才会被请求。相关防护有专门的单测。
 
+### 首次部署：创建 label
+
+Label 是**仓库状态**而不是文件，所以 fork 不会带上它们。工作流依赖四个 label：
+
+```bash
+gh label create site-request    --color 0e8a16 --description "站点提交，由受理工作流处理"
+gh label create removal-request --color b60205 --description "权利人移除请求，由人工处理"
+gh label create collected       --color 1d76db --description "已成功采集并加入订阅"
+gh label create needs-manual    --color fbca04 --description "自动采集失败，需人工补充配置"
+```
+
+这是踩过的坑，值得说明白：仓库最初只有 GitHub 默认的那批 label，四个依赖项一个都没有。其中 `site-request` 是**整条 Issue 受理路径的门槛**——缺了它，工作流根本不会触发，而且不会有任何报错，只是悄悄什么都不发生。
+
+现在有两层防护：`collected` / `needs-manual` 由 finalise 步骤按需创建；受理门槛除了看 label，还接受表单自身字段（`### 站点地址`）——label 是仓库状态而模板字段是文件，fork 一定有后者。所以即使忘了建 label，受理仍然可用。
+
 ---
 
 ## 常见问题
