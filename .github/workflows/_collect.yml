@@ -148,10 +148,14 @@ jobs:
           SITE_TOKENS: ${{ secrets.SITE_TOKENS }}
         run: |
           set -euo pipefail
+          # `--no-verify`, not `--verify false`: --verify is a flag pair (--verify/--no-verify),
+          # so a trailing `false` is parsed as a stray positional argument and the command dies
+          # with "Got unexpected extra argument(s) (false)". Verification belongs to the report
+          # job anyway, which runs it once over the merged result.
           python -m harvest.cli collect \
             --site "${{ matrix.site }}" \
             --mode "${{ inputs.mode }}" \
-            --verify false \
+            --no-verify \
             ${{ inputs.limits }}
 
       - name: Upload artefacts
