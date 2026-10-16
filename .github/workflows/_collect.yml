@@ -1,0 +1,284 @@
+# Reusable collection workflow.
+#
+# Split out from `collect.yml` so the Issue path can invoke exactly the same logic as the
+# scheduled path. If these two ever diverged, a user-submitted site would behave differently
+# from a cron-harvested one -- which is the kind of bug that only shows up in production.
+
+name: _collect
+
+on:
+  workflow_call:
+    inputs:
+      sites:
+        description: Comma-separated site keys. Empty means "every enabled site".
+        type: string
+        default: ""
+      tiers:
+        description: Comma-separated tier filter, e.g. "1,2".
+        type: string
+        default: ""
+      mode:
+        description: probe | full | incremental
+        type: string
+        default: "full"
+      limits:
+        description: Extra CLI flags, e.g. "--max-titles 200".
+        type: string
+        default: ""
+      verify:
+        description: Run the pre-commit self-check.
+        type: boolean
+        default: true
+      commit:
+        description: Commit and push the artefacts. Disable for dry runs.
+        type: boolean
+        default: true
+      issue_number:
+        description: Originating Issue number, for the comment posted at the end.
+        type: string
+        default: ""
+    outputs:
+      summary:
+        description: Human-readable run summary.
+        value: ${{ jobs.report.outputs.summary }}
+      sites_ok:
+        description: Number of sites harvested successfully.
+        value: ${{ jobs.report.outputs.sites_ok }}
+    secrets:
+      SITE_TOKENS:
+        required: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  # Serialise runs on the same branch: two concurrent runs would race on `git push` and one
+  # would lose its artefacts.
+  group: collect-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  PYTHON_VERSION: "3.13"
+  HARVEST_GATEWAY: ${{ vars.HARVEST_GATEWAY }}
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.build.outputs.matrix }}
+      count: ${{ steps.build.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Build matrix
+        id: build
+        env:
+          INPUT_SITES: ${{ inputs.sites }}
+          INPUT_TIERS: ${{ inputs.tiers }}
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          python -m harvest.cli plan --sites "$INPUT_SITES" --tiers "$INPUT_TIERS" --output .ci/matrix.txt
+          cat .ci/matrix.txt >> "$GITHUB_OUTPUT"
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, os, pathlib
+          raw = pathlib.Path('.ci/matrix.txt').read_text().split('matrix=', 1)[-1].strip()
+          data = json.loads(raw)
+          print(f"count={len(data.get('include', []))}")
+          PY
+          echo "--- matrix ---"
+          cat .ci/matrix.txt
+
+  collect:
+    needs: plan
+    # An empty matrix makes `strategy.matrix` evaluate to nothing, which GitHub rejects.
+    # Skipping the job explicitly is cleaner than emitting a dummy site.
+    if: needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 4          # caps total pressure on upstream sites
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Cache Playwright browsers
+        if: matrix.needs_browser
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Chromium (Tier 4 only)
+        if: matrix.needs_browser
+        run: python -m playwright install --with-deps chromium
+
+      - name: Harvest ${{ matrix.site }}
+        env:
+          SITE_TOKENS: ${{ secrets.SITE_TOKENS }}
+        run: |
+          set -euo pipefail
+          python -m harvest.cli collect \
+            --site "${{ matrix.site }}" \
+            --mode "${{ inputs.mode }}" \
+            --verify false \
+            ${{ inputs.limits }}
+
+      - name: Upload artefacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harvest-${{ matrix.site }}
+          path: |
+            data/raw/${{ matrix.site }}
+            data/normalized/${{ matrix.site }}.json
+            data/snapshot/${{ matrix.site }}
+            data/tvbox/sites/${{ matrix.site }}.json
+            sites/${{ matrix.site }}.yaml
+          if-no-files-found: warn
+          retention-days: 14
+
+  report:
+    needs: collect
+    if: always() && needs.plan.outputs.count != '0'
+    runs-on: ubuntu-latest
+    outputs:
+      summary: ${{ steps.summarise.outputs.summary }}
+      sites_ok: ${{ steps.summarise.outputs.sites_ok }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Download per-site artefacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: harvest-*
+          merge-multiple: true
+
+      - name: Regenerate configs
+        env:
+          GATEWAY: ${{ vars.HARVEST_GATEWAY }}
+        run: |
+          set -euo pipefail
+          python -m harvest.cli generate --all --flavors direct,gateway,experimental \
+            --gateway "$GATEWAY" --run-id "${{ github.run_id }}"
+
+      - name: Verify generated config
+        if: inputs.verify
+        run: |
+          set -euo pipefail
+          python -m harvest.cli verify --targets data/tvbox/index.json || \
+            echo "::warning::verification reported failures; see the report artefact"
+
+      - name: Prune raw archive
+        run: python -m harvest.cli prune --keep 7
+
+      - name: Summarise
+        id: summarise
+        run: |
+          set -euo pipefail
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib, glob
+          files = sorted(glob.glob('data/reports/*.json'))
+          if not files:
+              print("summary=no report produced")
+              print("sites_ok=0")
+              raise SystemExit(0)
+          payload = json.loads(pathlib.Path(files[-1]).read_text())
+          records = payload if isinstance(payload, list) else [payload]
+          last = records[-1]
+          s = last.get('summary', {})
+          text = (f"sites {s.get('sites_ok',0)}/{s.get('sites_total',0)}, "
+                  f"vods {s.get('vods',0)}, lines {s.get('lines',0)}, "
+                  f"filtered {s.get('filtered',0)}")
+          print(f"summary={text}")
+          print(f"sites_ok={s.get('sites_ok',0)}")
+          PY
+          echo "::notice::${{ steps.summarise.outputs.summary }}"
+
+      - name: Commit and push
+        if: inputs.commit
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data sites
+          if git diff --cached --quiet; then
+            echo "no changes to commit"
+            exit 0
+          fi
+          git commit -m "chore(data): harvest ${{ github.run_id }} [skip ci]"
+          git pull --rebase --autostash
+          git push
+
+      - name: Purge jsDelivr cache
+        # Not optional: branch caching is 12h by default, so without this a user keeps
+        # seeing yesterday's subscription long after a successful run.
+        if: inputs.commit
+        continue-on-error: true
+        env:
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: python -m harvest.cli purge-cdn --paths data/tvbox,data/snapshot --ref main
+
+      - name: Comment on originating issue
+        if: inputs.issue_number != ''
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ISSUE_NUMBER: ${{ inputs.issue_number }}
+          REPO: ${{ github.repository }}
+          SUBSCRIBE_URL: https://cdn.jsdelivr.net/gh/${{ github.repository }}@main/data/tvbox/index.json
+        run: |
+          set -euo pipefail
+          mkdir -p .ci
+          python - <<'PY' > .ci/comment.md
+          import glob, json, pathlib, os
+          text = "采集流程已执行完成。"
+          files = sorted(glob.glob('data/reports/*.json'))
+          if files:
+              payload = json.loads(pathlib.Path(files[-1]).read_text())
+              records = payload if isinstance(payload, list) else [payload]
+              last = records[-1]
+              s = last.get('summary', {})
+              lines = [
+                  "**采集结果**",
+                  "",
+                  f"- 站点：{s.get('sites_ok',0)}/{s.get('sites_total',0)} 成功",
+                  f"- 影片 {s.get('vods',0)} 部 / 线路 {s.get('lines',0)} 条 / 剧集 {s.get('episodes',0)} 集",
+                  f"- 过滤条目 {s.get('filtered',0)}（含博彩命中）",
+              ]
+              problems = [site for site in last.get('sites', []) if site.get('status') not in ('ok', 'snapshot')]
+              if problems:
+                  lines += ["", "**需要关注**", ""]
+                  for site in problems[:5]:
+                      errs = "; ".join(e.get('error','') for e in (site.get('errors') or [])[:2])
+                      lines.append(f"- `{site.get('key')}` 状态 `{site.get('status')}` {errs[:160]}")
+              lines += ["", f"订阅地址：{os.environ.get('SUBSCRIBE_URL','')}"]
+              text = "\n".join(lines)
+          print(text)
+          PY
+          gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body-file .ci/comment.md

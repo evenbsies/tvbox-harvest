@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TVBox configuration produced by tvbox-harvest",
+  "description": "Validated before commit by `harvest verify`. Keeping the shape pinned matters: an extra comma or a wrong field type makes a client reject the whole subscription, not just one entry.",
+  "type": "object",
+  "required": ["sites"],
+  "additionalProperties": true,
+  "properties": {
+    "spider": {
+      "type": "string",
+      "description": "Deliberately empty in this project -- the generated configs never require a jar."
+    },
+    "sites": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["key", "name", "type", "api"],
+        "additionalProperties": true,
+        "properties": {
+          "key": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_][A-Za-z0-9_.-]{0,63}$",
+            "description": "Unique site identifier. TVBox uses it to persist per-site state, so it must stay stable."
+          },
+          "name": { "type": "string", "minLength": 1 },
+          "type": {
+            "type": "integer",
+            "enum": [0, 1, 3],
+            "description": "0 = XML interface, 1 = MacCMS JSON interface, 3 = spider (jar / drpy JS)."
+          },
+          "api": { "type": "string", "minLength": 1 },
+          "ext": { "type": "string" },
+          "searchable": { "type": "integer", "enum": [0, 1] },
+          "quickSearch": { "type": "integer", "enum": [0, 1] },
+          "filterable": { "type": "integer", "enum": [0, 1] },
+          "changeable": { "type": "integer", "enum": [0, 1] },
+          "playerType": { "type": "integer" },
+          "style": { "type": "object" },
+          "hide": { "type": "integer", "enum": [0, 1] }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": 3 } }, "required": ["type"] },
+            "then": {
+              "comment": "Type 3 requires a spider engine; this project never emits type 3 unless drpy support is explicitly enabled and verified.",
+              "properties": { "api": { "type": "string" } }
+            }
+          }
+        ]
+      }
+    },
+    "lives": { "type": "array" },
+    "parses": { "type": "array" },
+    "flags": { "type": "array" },
+    "rules": { "type": "array" },
+    "version": { "type": "string" },
+    "generated_at": { "type": "string" },
+    "generated_by": { "type": "string" }
+  }
+}

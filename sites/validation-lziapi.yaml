@@ -1,0 +1,58 @@
+# Tier-1 recipe used to validate the collection pipeline end-to-end.
+#
+# This is a *public MacCMS collection interface* -- the standardised `api.php/provide/vod/`
+# endpoint that resource sites publish for others to consume. It is kept here as a live
+# smoke-test target for the Tier-1 path, and it is DISABLED by default: a fresh clone produces
+# an empty subscription, and nothing is harvested until you deliberately enable a site.
+# Read COMPLIANCE.md before enabling anything.
+#
+# To exercise it locally:
+#     harvest collect --site validation-lziapi --mode full
+#
+# Note this endpoint is a good example of a real-world MacCMS quirk the pipeline has to handle:
+# it returns perfectly valid JSON under `Content-Type: text/html;charset=utf-8`. Detection
+# therefore trusts the response body and ignores the declared content type.
+
+key: validation-lziapi
+name: 采集接口验证站
+base_url: https://cj.lziapi.com
+adapter: maccms_v10
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Public collection endpoint used only to validate Tier-1 harvesting. Its catalogue is
+    third-party aggregated content; enable it only if you have satisfied yourself that doing so
+    is lawful where you are.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    Referer: "{base_url}/"
+  rate_limit: 1.0
+  timeout: 20
+  retries: 3
+  respect_robots: true
+  delay_jitter: 0.3
+
+maccms:
+  # Verified by `harvest probe`: this endpoint answers ?ac=list with a full catalogue and a
+  # 44-entry class table, and passes the ?ac=detail shape check.
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  max_pages: 20
+  incremental_hours: 24
+
+tvbox:
+  searchable: 1
+  quickSearch: 1
+  filterable: 1
+  playerType: 2
+
+detect:
+  version: 1
+  result: maccms_v10
+  tier: 1
+  status: ok

@@ -1,0 +1,57 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tvbox-harvest"
+version = "0.1.0"
+description = "Auto-harvest video VOD sources from submitted sites and generate TVBox-compatible subscription JSON"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx[http2]~=0.27.2",
+    "selectolax~=0.3.21",
+    "pydantic~=2.9.2",
+    "pydantic-settings~=2.6.0",
+    "PyYAML~=6.0.2",
+    "orjson~=3.10.7",
+    "tenacity~=9.0.0",
+    "structlog~=24.4.0",
+    "typer~=0.12.5",
+    "rich~=13.9.2",
+    "playwright~=1.48.0",
+    "python-dateutil~=2.9.0",
+    "jsonschema~=4.23.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest~=8.3.3", "pytest-asyncio~=0.24.0", "respx~=0.21.1"]
+
+[project.scripts]
+harvest = "harvest.cli:app"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+    # Report text and recipe comments are written to a natural width, not to a column.
+    "E501",
+    # B008 flags `x: str = typer.Option(...)`. That is not a mistake being tolerated -- it is the
+    # only spelling Typer accepts for declaring a CLI default. Every flagged site in cli.py is
+    # correct by construction, so the rule is simply inapplicable here.
+    "B008",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests stub out methods with deliberately mismatched signatures and reuse fixture names.
+"tests/**" = ["B011", "N802"]

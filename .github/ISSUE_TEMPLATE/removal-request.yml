@@ -1,0 +1,38 @@
+name: 版权 / 删除请求
+description: 请求移除某个已被收录的站点或某条索引记录
+title: "[移除请求] "
+labels: ["removal-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本项目只存储**地址索引**，不存储、不托管、不转发任何媒体文件。
+        提交移除请求后，维护者会在 24 小时内处理：停用对应站点或把它加入黑名单，并在下一次生成时从订阅中移除。
+
+  - type: input
+    id: target
+    attributes:
+      label: 涉及的站点或域名
+      placeholder: https://www.example.com/
+    validations:
+      required: true
+
+  - type: dropdown
+    id: request_type
+    attributes:
+      label: 请求类型
+      options:
+        - 我是权利人，请求移除该站点
+        - 我是站点运营者，请求停止采集本站点
+        - 该站点含违规内容
+        - 其他
+    validations:
+      required: true
+
+  - type: textarea
+    id: detail
+    attributes:
+      label: 说明
+      description: 权利证明、具体链接或任何有助于定位的信息。
+    validations:
+      required: false

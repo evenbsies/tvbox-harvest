@@ -1,0 +1,49 @@
+# Defaults for the generated TVBox config. Any per-site recipe may override these via
+# its `tvbox:` block. Field semantics follow the TVBox / 影视仓 config format:
+#   type 0 = XML interface, type 1 = MacCMS (Apple CMS) JSON interface, type 3 = spider
+#   (jar / drpy JS). type 3 requires a `spider` field pointing at the parser asset, so
+#   this project deliberately prefers type 1 and leaves `spider` empty.
+
+top_level:
+  spider: ""
+  author: tvbox-harvest
+  wallpaper: ""
+  ua: ""
+  requestHeader: {}
+  parses: []
+  flags: []
+  lives: []
+  rules: []
+
+site_defaults:
+  type: 1
+  searchable: 1
+  quickSearch: 1
+  filterable: 1
+  changeable: 1
+  playerType: 2
+  style:
+    type: rect
+    ratio: 1.4
+  ext: ""
+
+# Applied only to sites whose adapter is in `for_tiers` (used when the site is served
+# through the optional edge gateway rather than hit directly).
+gateway_defaults:
+  type: 1
+  searchable: 1
+  quickSearch: 1
+  filterable: 1
+
+# Applied to drpy-based entries (type 3). Disabled until spike S3 confirms client support.
+drpy_defaults:
+  type: 3
+  searchable: 1
+  quickSearch: 1
+  filterable: 0
+  changeable: 0
+
+# Name suffixing for the generated site list, e.g. "示例站 [T1]".
+name_suffix:
+  enabled: false
+  template: " [{tier}]"

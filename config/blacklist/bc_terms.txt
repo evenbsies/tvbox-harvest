@@ -1,0 +1,106 @@
+# Gambling (BC / 博彩) keyword list.
+#
+# Used for two things:
+#   1. Site-level detection: counting gambling-advertising signals on a site's pages
+#      (iframes, outbound links, injected redirect scripts, floating ad layers).
+#   2. Entry-level detection: identifying content whose *name/remarks/category* is a
+#      gambling product rather than a video title, and identifying "sources supplied by
+#      gambling operators" (hosts that only ever serve gambling-related material).
+#
+# One term per line. '#' comments. CJK terms use substring matching, ASCII uses
+# word-boundary matching.
+
+# --- Betting / casino verticals ---
+真人娱乐
+真人荷官
+百家乐
+龙虎
+牛牛
+骰宝
+轮盘
+二十一点
+德州扑克
+棋牌
+电子游艺
+捕鱼
+捕鱼达人
+电子竞技投注
+体育盘口
+滚球
+让球
+大小球
+亚盘
+欧赔
+
+# --- Wagering / account mechanics (the vocabulary of gambling ad copy) ---
+投注
+下注
+押注
+博彩
+赌博
+彩票
+时时彩
+六合彩
+pk10
+快乐彩
+秒速赛车
+投注站
+盘口
+赔率
+上分
+下分
+提现
+充值
+返水
+回水
+包杀
+包赢
+稳赚
+计划群
+带单
+导师带
+跟单
+首存
+首充
+彩金
+红利
+洗码
+代理
+无限代理
+招商代理
+会员注册
+一键登录
+免登录
+试玩
+免费试玩
+棋牌源码
+包网
+搭建
+
+# --- Brand-ish tokens frequently used in gambling ad copy / hostnames ---
+kaiyun
+开云
+leyu
+乐鱼
+boyu
+博鱼
+xinbao
+新宝
+jinsha
+金沙
+yabo
+亚博
+weide
+伟德
+hbty
+hth
+吉祥
+银河
+永利
+太阳城
+普京
+万博
+凤凰
+英皇
+1xbet
+bet365

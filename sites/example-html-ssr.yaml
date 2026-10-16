@@ -1,0 +1,83 @@
+# Tier-3 recipe template (plain server-rendered HTML site, no catalogue API).
+#
+# Copy this file to `sites/<key>.yaml`, set `base_url`, and run:
+#     harvest probe --site <key>
+# The `detect:` block is written back automatically; everything above it is yours.
+#
+# IMPORTANT: only add sites you are permitted to harvest. See COMPLIANCE.md.
+
+key: example-html-ssr
+name: 示例HTML站
+base_url: https://example.com
+adapter: html_ssr
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: "Replace with your own assessment of this source's licensing status."
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    Referer: "{base_url}/"
+    Accept-Language: "zh-CN,zh;q=0.9"
+  rate_limit: 1.0
+  timeout: 15
+  retries: 3
+  respect_robots: true
+  delay_jitter: 0.3
+
+# Optional. Without it the adapter falls back to the detail-link cluster the probe found,
+# which usually only covers the homepage's "latest updates" strip.
+listing:
+  pages:
+    url: "/vodshow/{cat}--------{page}---.html"
+    item: "a.vod-item::attr(href)"
+  categories:
+    - { id: "1", name: "电影" }
+    - { id: "2", name: "连续剧" }
+  max_pages: 3
+
+selectors:
+  detail:
+    title: "h1.title::text"
+    # Episode extraction, tried in order; the first rule that yields media wins.
+    #
+    # There are two site shapes and they are not interchangeable:
+    #
+    #   (A) the detail page links media directly -- e.g. `.playlist a[href$=".m3u8"]`
+    #   (B) the detail page links one intermediate *play page per episode*
+    #       (`/vodplay/12345-1-1.html`) and the address only exists on that page
+    #
+    # For (B) leave the rules pointing at the playlist links and let the adapter follow them:
+    # it detects that the links are pages rather than media and walks one request per episode.
+    # That costs extra requests, so `max_play_pages` bounds it and the run report states how
+    # many were fetched.
+    episodes:
+      - { type: css_list, selector: ".playlist a", name: "::text", url: "::attr(href)" }
+      # Sites that embed a player blob on the detail page itself (shape A, movie sites):
+      # - { type: json_regex, pattern: 'player_aaaa\s*=\s*(\{.*?\})', path: "$.url" }
+
+    # Only needed when shape (B)'s play page does not use the default `player_aaaa` variable
+    # or an m3u8 literal. Applied to each play page instead of `episodes`.
+    # play_page_episodes:
+    #   - { type: json_regex, pattern: 'MacPlayer\.playinfo\s*=\s*(\{.*?\})', path: "$.url" }
+
+    # Ceiling on the number of intermediate play pages followed per title. Truncation is
+    # always reported, never silent.
+    max_play_pages: 60
+
+    fields:
+      year: { type: css, selector: ".data:has(:contains('年份'))", value: "::text" }
+      content: { type: css, selector: ".detail-content", value: "::html" }
+
+  list:
+    # Path shape used to recognise detail links, with {id}/{n}/{slug} as wildcards.
+    # Usually filled in by `harvest probe`; set it by hand if discovery finds too much.
+    cluster_pattern: "/voddetail/{id}.html"
+
+tvbox:
+  playerType: 2
+
+detect: {}

@@ -1,0 +1,69 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# --- Test / lint caches ---
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# --- Local harvest scratch ---
+# Raw responses are line-by-line replays of third-party pages. They are useful while debugging a
+# site locally but must never be committed -- this is the one category that is genuine copied
+# content rather than a derived index.
+data/raw/
+data/normalized/
+data/reports/
+data/reports/*.local.*
+
+# --- Generated artefacts: what IS committed, and why ---
+# The subscription index and the catalogue shards ARE committed, because the whole point of the
+# project is a jsDelivr-servable subscription URL:
+#
+#     https://cdn.jsdelivr.net/gh/<owner>/<repo>@main/data/tvbox/index.json
+#
+# That URL can only resolve if the file is in the repository. What gets published is an index of
+# *addresses* -- site keys, category names, titles, play URLs -- derived from catalogues the
+# operator explicitly enabled. No page content, no media, and no raw responses are published;
+# every generated file is rebuilt from scratch on each run, so the repository never accumulates
+# history of a source the operator has since disabled.
+#
+# `data/raw/`, `data/normalized/` and `data/reports/` are excluded above: the first is copied
+# content, the second is a debugging intermediate, and the third is operational telemetry that
+# has no reason to live in git history.
+
+# --- Workflow scratch ---
+.ci/
+*.local.yaml
+
+# --- Node (gateway) ---
+node_modules/
+gateway/.wrangler/
+gateway/dist/
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# --- Playwright recordings / browser profiles ---
+ms-playwright/
+playwright-report/

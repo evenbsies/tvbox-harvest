@@ -1,0 +1,7 @@
+# Regex blacklist for adult content, applied to vod_name / vod_remarks / content.
+# Use sparingly: regex over-matching silently removes legitimate titles.
+(?i)\bxxx\b
+(?i)\bporn\b
+(?i)\bhentai\b
+(?i)\bnsfw\b
+(?i)av\d{2,4}\b

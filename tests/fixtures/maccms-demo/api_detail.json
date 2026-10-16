@@ -1,0 +1,12 @@
+{
+  "site_key": "maccms-demo",
+  "name": "api_detail",
+  "url": "https://demo-cms.example.com/api.php/provide/vod/?ac=detail&ids=34822",
+  "status": 200,
+  "content_type": "application/json",
+  "headers": {
+    "server": "nginx"
+  },
+  "truncated": false,
+  "body": "{\"code\": 1, \"msg\": \"数据列表\", \"page\": 1, \"pagecount\": 1, \"limit\": \"20\", \"total\": 1, \"list\": [{\"vod_id\": 34822, \"vod_name\": \"示例剧集二 第一季\", \"type_id\": 2, \"type_name\": \"连续剧\", \"vod_en\": \"demo-two\", \"vod_time\": \"2026-10-15 20:00:00\", \"vod_remarks\": \"更新至2集\", \"vod_play_from\": \"ffm3u8\", \"vod_pic\": \"https://img.example.com/2.jpg\", \"vod_year\": \"2025\", \"vod_area\": \"大陆\", \"vod_lang\": \"国语\", \"vod_actor\": \"\", \"vod_director\": \"\", \"vod_content\": \"<p>简介二</p>\", \"vod_play_url\": \"第01集$https://cdn.example.com/a/1.m3u8#第02集$https://cdn.example.com/a/2.m3u8\", \"vod_serial\": \"2\"}]}"
+}

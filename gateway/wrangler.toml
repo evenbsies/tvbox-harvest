@@ -1,0 +1,40 @@
+# Cloudflare Worker configuration for the tvbox-harvest gateway.
+#
+# Deploy:
+#   cd gateway
+#   npm install
+#   wrangler secret put DISPATCH_TOKEN     # GitHub fine-grained PAT, see README
+#   wrangler deploy
+#
+# The free plan is sufficient: the Worker only performs a handful of CDN reads per request
+# (cached per isolate), and snapshots change a few times a day at most.
+
+name = "tvbox-harvest-gateway"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+
+[vars]
+# REQUIRED. The repository holding the snapshots, as "owner/name".
+# jsDelivr's `/gh/` endpoint only serves public repositories.
+REPO = "CHANGE_ME/CHANGE_ME"
+
+# Optional. Defaults to https://cdn.jsdelivr.net/gh/<REPO>@main/data/snapshot
+# Override if you serve the snapshots yourself (S3, R2, a mirror, ...).
+# SNAPSHOT_BASE = "https://cdn.jsdelivr.net/gh/owner/name@main/data/snapshot"
+
+# Optional. Seconds to memoise parsed shards inside a Worker isolate.
+# Lower = fresher data but more CDN reads; 600 is a good balance since snapshots update
+# at most a few times a day while a player can issue hundreds of requests.
+CACHE_TTL = "600"
+
+# DISPATCH_TOKEN is a SECRET, not a var -- never commit it. It doubles as the HMAC key for
+# /admin/refresh:
+#   wrangler secret put DISPATCH_TOKEN
+
+# Uncomment to restrict the gateway to a custom domain.
+# routes = [
+#   { pattern = "tvbox-gw.example.com", custom_domain = true }
+# ]
+
+[observability]
+enabled = true

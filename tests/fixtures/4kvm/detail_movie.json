@@ -1,0 +1,14 @@
+{
+  "site_key": "4kvm",
+  "name": "detail_movie",
+  "url": "https://www.4kvm.tv/play/ch4iax9g1",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "headers": {
+    "server": "nginx/1.29.7",
+    "content-type": "text/html; charset=utf-8"
+  },
+  "truncated": false,
+  "body": "<!DOCTYPE html>\n<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/><title>某电影 - 第1集 -4k影视</title></head><body>\n<div class=\"player\" data-vod-id=\"ch4l5b3mn\"></div>\n<div x-data=\"episodeManager(1, 1, [{ lineName: 'alists', episodeCount: 1 }])\"></div>\n<div id=\"episodes\"><a data-line=\"1\" dataid=\"50001\" data-episode=\"1\">第 1 集</a></div>\n<p id=\"player-episode-label\">第 1 集</p>\n<script>\n  window._pdf = \"WyJvc3MuZG91eWluYml0LmNvbSIsIm15b3NzLmRvdXlpbmJpdC50b3AiXQ==\";\n  window.currentUser = { user_id: 0, username: '' };\n</script>\n<script src=\"/static/js/artplayer.54ffaf75.js\" defer></script>\n<script src=\"/static/js/hls.min.last.d92683eb.js\" defer></script>\n</body></html>",
+  "_note": "Curated compact fixture: trimmed to the signals under test, not a full page copy."
+}

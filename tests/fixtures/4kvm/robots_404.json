@@ -1,0 +1,14 @@
+{
+  "site_key": "4kvm",
+  "name": "robots",
+  "url": "https://www.4kvm.tv/robots.txt",
+  "status": 404,
+  "content_type": "text/plain; charset=utf-8",
+  "headers": {
+    "server": "nginx/1.29.7",
+    "content-type": "text/plain; charset=utf-8"
+  },
+  "truncated": false,
+  "body": "404 page not found\n",
+  "_note": "Curated compact fixture: trimmed to the signals under test, not a full page copy."
+}

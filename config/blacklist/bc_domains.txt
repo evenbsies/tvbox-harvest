@@ -1,0 +1,42 @@
+# Gambling (BC / 博彩) advertising domain blacklist.
+#
+# PURPOSE: this file is a *deny* list. Any URL whose host matches an entry here is
+# treated as gambling advertising and dropped -- either at site level (the site itself
+# is a gambling front) or at entry level (a playable URL that carries gambling promotion).
+#
+# Matching rules:
+#   - A plain line is a host: it matches that host exactly, or any subdomain of it
+#     (e.g. "xx.example" also matches "a.xx.example").
+#   - A line prefixed with "re:" is a regular expression, tested against BOTH the full URL
+#     and the bare hostname. Use re: when you need to match a *shape* of hostname rather
+#     than a specific domain.
+#   - Lines starting with '#' are comments; blank lines ignored.
+#
+# MAINTENANCE: you do not have to maintain this by hand. `harvest doctor --learn-bc`
+# promotes hosts that repeatedly appear with gambling signals into
+# config/blacklist/bc_domains.learned.txt, which is loaded alongside this file. Hand-curated
+# entries belong here; machine-discovered ones belong in the .learned file so they can be
+# regenerated and audited separately.
+
+# --- HLS/player manifest injections (ad domains seen embedded in #EXT-X tags) ---
+re:bc[-_.]?ad
+re:gg[-_.]?ad[-_.]?hls
+
+# --- Operator brand tokens in a hostname label ---
+# An optional label prefix, a distinctive gambling brand token, an optional suffix, terminated
+# by a label boundary. The trailing dot anchor is what stops this from matching ordinary words
+# that merely contain a brand-like substring.
+re:[a-z0-9-]{0,16}[-.]?(kaiyun|leyu|boyu|xinbao|jinsha|yabo|weide|hbty|hth|casino|betting|baccarat|roulette|lottery)[a-z0-9-]{0,16}\.
+# A bare "bc"/"bet" label is only suspicious when delimited -- otherwise "abc.example" and
+# "debate.example" would be caught.
+re:(?:^|\.)bc[-_.]
+re:[-.]bet(?:ting)?[-_.]
+re:(?:^|\.)(?:bc|bet|betting)\d{2,}\.
+
+# --- Generic squatting patterns commonly used by gambling ad redirectors ---
+# Long random-looking alnum labels combined with gambling keywords.
+re:[a-z0-9]{6,}-?(bc|bet|kaiyun|leyu|boyu|xinbao|jinsha|yabo|weide|hbty)[a-z0-9]{0,12}\.
+
+# --- Add concrete operator domains below as they are confirmed by evidence ---
+# Example (keep one per line, host only, no scheme). A host here also matches its subdomains:
+# ads.some-betting-operator.example

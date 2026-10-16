@@ -1,0 +1,12 @@
+{
+  "site_key": "maccms-demo",
+  "name": "api_list",
+  "url": "https://demo-cms.example.com/api.php/provide/vod/?ac=list&pg=1",
+  "status": 200,
+  "content_type": "application/json",
+  "headers": {
+    "server": "nginx"
+  },
+  "truncated": false,
+  "body": "{\"code\": 1, \"msg\": \"数据列表\", \"page\": 1, \"pagecount\": 3, \"limit\": \"20\", \"total\": 42, \"class\": [{\"type_id\": 1, \"type_name\": \"电影\"}, {\"type_id\": 2, \"type_name\": \"连续剧\"}, {\"type_id\": 4, \"type_name\": \"动漫\"}], \"list\": [{\"vod_id\": 34821, \"vod_name\": \"示例影片一 4K 蓝光中字\", \"type_id\": 1, \"type_name\": \"电影\", \"vod_en\": \"demo-one\", \"vod_time\": \"2026-10-15 21:00:00\", \"vod_remarks\": \"HD\", \"vod_play_from\": \"lzm3u8\", \"vod_pic\": \"https://img.example.com/1.jpg\", \"vod_year\": \"2024\", \"vod_area\": \"大陆\", \"vod_lang\": \"国语\", \"vod_actor\": \"演员甲,演员乙\", \"vod_director\": \"导演甲\", \"vod_content\": \"<p>简介一</p>\"}, {\"vod_id\": 34822, \"vod_name\": \"示例剧集二 第一季\", \"type_id\": 2, \"type_name\": \"连续剧\", \"vod_en\": \"demo-two\", \"vod_time\": \"2026-10-15 20:00:00\", \"vod_remarks\": \"更新至2集\", \"vod_play_from\": \"ffm3u8\", \"vod_pic\": \"https://img.example.com/2.jpg\", \"vod_year\": \"2025\", \"vod_area\": \"大陆\", \"vod_lang\": \"国语\", \"vod_actor\": \"\", \"vod_director\": \"\", \"vod_content\": \"<p>简介二</p>\"}]}"
+}

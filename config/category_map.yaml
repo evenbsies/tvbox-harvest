@@ -1,0 +1,166 @@
+# Category normalization: maps each site's raw category names onto a small set of
+# TVBox-friendly buckets. Unmapped names are kept verbatim in the report so the table
+# can be iterated on (see data/reports/<date>.json -> unknown_categories).
+
+targets: [电影, 连续剧, 综艺, 动漫, 纪录片, 短剧, 体育, 其他]
+
+rules:
+  电影:
+    - 电影
+    - 动作片
+    - 喜剧片
+    - 爱情片
+    - 科幻片
+    - 恐怖片
+    - 战争片
+    - 剧情片
+    - 悬疑片
+    - 犯罪片
+    - 冒险片
+    - 奇幻片
+    - 灾难片
+    - 动画电影
+    - 动作电影
+    - 伦理片
+    - 邵氏电影
+    - 高清电影
+    - 片
+  连续剧:
+    - 电视剧
+    - 连续剧
+    - 剧集
+    - 国产剧
+    - 大陆剧
+    - 港台剧
+    - 香港剧
+    - 台湾剧
+    - 日韩剧
+    - 欧美剧
+    - 海外剧
+    - 美剧
+    - 韩剧
+    - 日剧
+    - 泰剧
+    - 英剧
+    - 新加坡剧
+    - 其他剧
+  综艺:
+    - 综艺
+    - 综艺节目
+    - 真人秀
+    - 脱口秀
+    - 内地综艺
+    - 港台综艺
+    - 日韩综艺
+    - 欧美综艺
+  动漫:
+    - 动漫
+    - 番剧
+    - 国漫
+    - 日漫
+    - 动画
+    - 动画片
+    - 少儿
+    - 儿童
+    - 剧场版
+  纪录片:
+    - 纪录片
+    - 纪录
+    - 记录片
+  短剧:
+    - 短剧
+    - 微短剧
+    - 竖屏剧
+    - 短剧场
+    - 短剧集
+    - 爽剧
+  体育:
+    - 体育
+    - 赛事
+    - 体育运动
+    - 足球
+    - 篮球
+    - 网球
+    - 排球
+    - 乒乓球
+    - 羽毛球
+    - 斯诺克
+    - 台球
+    - 赛车
+    - 搏击
+    - 拳击
+    - 综合体育
+  # `其他` is a *real* target, not just the fallback. Listing a category here is a deliberate
+  # decision ("this belongs nowhere in particular"), which is different from a category that
+  # matched nothing at all -- only the latter is reported as unrecognised, so the report stays
+  # actionable instead of filling up with known-irrelevant entries.
+  其他:
+    - 其他
+    - 演员
+    - 明星
+    - 电影解说
+    - 影视解说
+    - 解说
+    - 预告片
+    - 花絮
+    - 专题
+    - 片单
+    - 资讯
+    - 新闻
+    - 新闻资讯
+    - 电影资讯
+    - 娱乐新闻
+    - 综艺资讯
+
+# Ordered fallback rules, applied only after the exact table (and the suffix retry) fail.
+# Order is load-bearing: the specific checks must come before the generic suffix rules, or
+# "AI漫剧" would be swallowed by the `剧` rule and land in 连续剧, and "记录片" would be
+# swallowed by the `片` rule and land in 电影.
+fallback_rules:
+  - {match: contains, pattern: 纪录, target: 纪录片}
+  - {match: contains, pattern: 记录, target: 纪录片}
+  - {match: contains, pattern: 动漫, target: 动漫}
+  - {match: contains, pattern: 动画, target: 动漫}
+  - {match: contains, pattern: 漫剧, target: 动漫}
+  - {match: contains, pattern: 综艺, target: 综艺}
+  - {match: contains, pattern: 体育, target: 体育}
+  - {match: contains, pattern: 足球, target: 体育}
+  - {match: contains, pattern: 篮球, target: 体育}
+  - {match: contains, pattern: 网球, target: 体育}
+  - {match: contains, pattern: 斯诺克, target: 体育}
+  - {match: contains, pattern: 赛事, target: 体育}
+  - {match: contains, pattern: 资讯, target: 其他}
+  - {match: contains, pattern: 新闻, target: 其他}
+  # Broad suffix rules last. Every "*剧" is a series; not every "*片" is a movie, which is why
+  # the specific content-type checks above have to run first.
+  - {match: endswith, pattern: 剧, target: 连续剧}
+  - {match: endswith, pattern: 片, target: 电影}
+
+# When an exact-table lookup fails, retry after removing one of these trailing characters.
+# This single rule resolves a whole family of variant spellings at once: 电影片→电影,
+# 综艺片→综艺, 动漫片→动漫, rather than requiring each variant to be enumerated.
+strip_suffixes: ["片"]
+
+# Fallback bucket when nothing matches. Landing here (rather than on an explicitly listed
+# `其他` entry) is what gets counted as "unrecognised category" in the run report.
+unknown_policy: 其他
+
+# Categories that are dropped outright, regardless of any other mapping. On aggregated CMS
+# sites the category name is the most reliable -- and cheapest -- content signal available:
+# a category literally called "成人" needs no body-text analysis to act on.
+drop_categories:
+  - 成人
+  - 成人片
+  - 伦理
+  - 伦理片
+  - 里番
+  - 情色
+  - 三级
+  - 三级片
+  - 福利
+  - 福利片
+  - 棋牌
+  - 彩票
+  - 真人娱乐
+  - 博彩
+  - 深夜剧场

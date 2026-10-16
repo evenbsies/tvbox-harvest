@@ -1,0 +1,16 @@
+{
+  "name": "tvbox-harvest-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Edge gateway that serves tvbox-harvest snapshots in MacCMS-compatible JSON so Tier 3/4 sites are usable in TVBox without a client plugin",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "tail": "wrangler tail",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}

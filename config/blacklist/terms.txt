@@ -1,0 +1,25 @@
+# Adult-content keyword blacklist.
+# Matched against vod_name / vod_remarks / vod_content / cat_raw.
+# One term per line. Lines starting with '#' are comments. Matching is case-insensitive
+# substring matching for CJK terms and word-boundary matching for ASCII terms.
+成人
+情色
+色情
+三级片
+限制级
+里番
+无码
+有码
+av女
+女优
+脱衣
+裸
+艳照
+淫
+娼
+嫖
+成人影片
+成人视频
+伦理片
+福利片
+深夜剧场

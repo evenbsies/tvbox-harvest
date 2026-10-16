@@ -1,0 +1,110 @@
+# Validation for changes to code, recipes, or configuration.
+#
+# The regression suite runs entirely offline against recorded fixtures. That is deliberate:
+# a test suite that reaches out to live sites becomes flaky, and a flaky suite gets ignored --
+# which is exactly when the tier-detection regressions it exists to catch slip through.
+
+name: validate
+
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "sites/**"
+      - "config/**"
+      - "tests/**"
+      - "requirements.txt"
+      - "pyproject.toml"
+      - ".github/workflows/**"
+  push:
+    branches: [main]
+    paths:
+      - "src/**"
+      - "tests/**"
+      - "config/schema/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint
+        run: ruff check src tests
+
+      - name: Unit tests (offline)
+        env:
+          HARVEST_OFFLINE: "0"   # tests use recorded fixtures, not the network
+        run: pytest -q
+
+  recipes:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      - name: Validate every recipe against the schema
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, sys, glob, pathlib
+          import jsonschema, yaml
+
+          schema = json.loads(pathlib.Path('config/schema/site.schema.json').read_text())
+          problems = []
+          files = [p for p in glob.glob('sites/*.yaml') if not p.endswith('registry.yaml')]
+          for path in files:
+              data = yaml.safe_load(pathlib.Path(path).read_text()) or {}
+              try:
+                  jsonschema.validate(data, schema)
+              except jsonschema.ValidationError as exc:
+                  problems.append(f"{path}: {exc.message} (at {'/'.join(str(p) for p in exc.absolute_path)})")
+          if problems:
+              print("::error::recipe schema validation failed")
+              for problem in problems:
+                  print(problem)
+              sys.exit(1)
+          print(f"validated {len(files)} recipes")
+          PY
+
+      - name: Doctor (registry / blacklist / staleness)
+        run: python -m harvest.cli doctor
+
+      - name: Validate generated config schema (self-test)
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, pathlib, jsonschema
+          schema = json.loads(pathlib.Path('config/schema/tvbox.schema.json').read_text())
+          sample = {
+              "spider": "",
+              "sites": [
+                  {"key": "demo", "name": "示例", "type": 1,
+                   "api": "https://example.com/api.php/provide/vod/",
+                   "searchable": 1, "quickSearch": 1, "filterable": 1, "playerType": 2}
+              ],
+              "lives": [], "parses": [], "flags": [], "rules": [],
+              "version": "test", "generated_at": "2026-01-01T00:00:00Z", "generated_by": "test",
+          }
+          jsonschema.validate(sample, schema)
+          print("tvbox schema OK")
+          PY

@@ -1,0 +1,12 @@
+{
+  "site_key": "custom-json",
+  "name": "list",
+  "url": "https://api.example.net/v1/list?page=1",
+  "status": 200,
+  "content_type": "application/json",
+  "headers": {
+    "server": "Caddy"
+  },
+  "truncated": false,
+  "body": "{\"errno\": 0, \"data\": {\"page\": 1, \"pages\": 1, \"total\": 1, \"items\": [{\"id\": \"tt123\", \"title\": \"自定义接口片名\", \"poster\": \"https://img.x.com/p.jpg\", \"category\": \"电影\", \"release\": \"2023\", \"play_list\": [{\"name\": \"正片\", \"url\": \"https://cdn.x.com/a/index.m3u8\", \"line\": \"默认\"}]}]}}"
+}

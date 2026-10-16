@@ -1,0 +1,301 @@
+# tvbox-harvest
+
+把"随手收集的视频网站 URL"变成一份 TVBox 可直接订阅的配置：在手机上通过 Issue 表单提交站点，GitHub Actions 自动探测站点类型、采集点播源、清洗去重，产出 JSON 并推送回仓库。
+
+**只生成地址索引，不托管任何媒体内容。** 使用前请阅读 [COMPLIANCE.md](COMPLIANCE.md)。
+
+---
+
+## 它是怎么工作的
+
+```
+你提交 Issue ──> Actions 探测站点层级 ──> 采集 ──> 清洗/去重/过滤 ──> 生成 TVBox JSON ──> 提交回仓库 + 刷新 CDN
+                                                │
+                                        TVBox 订阅 index.json
+```
+
+三个平面各司其职：
+
+| 平面 | 职责 | 实现 |
+|---|---|---|
+| **采集平面** | 探测、抓取、清洗、生成 | GitHub Actions（Python） |
+| **数据平面** | 存放产物与站点台账 | Git 仓库 + jsDelivr CDN |
+| **运行时平面** | 客户端读订阅、发起播放 | TVBox / 影视仓 等 |
+
+关键设计：**GitHub Actions 是批处理，TVBox 是运行时。** 两者之间必须有桥。本项目对三种桥的取舍是：
+
+- **Tier 1 / 2 站直连上游接口** —— 零依赖、零成本，这是 MVP 的主体
+- **Tier 3 / 4 站经边缘网关**（可选，见 `gateway/`）—— 网关照常返回 MacCMS 格式 JSON，客户端无需任何插件
+- **自研 jar 不采用** —— 能力上限与网关重叠，却要额外维护一个二进制
+
+---
+
+## 四级适配器
+
+最贵的探测放最后，最便宜的放最前。绝大多数站点在第 1~2 级就被解决。
+
+| 层级 | 类型 | 探测依据 | 单站成本 |
+|---|---|---|---|
+| **T1** | 苹果CMS V10 标准接口 | 响应即 MacCMS JSON（`code`/`list`/`total`/`class`） | 20~100 请求，<2 分钟 |
+| **T2** | 自定义 JSON/XML 接口 | 结构化数据但字段非标准，按字段词典打分 | 10~50 请求 |
+| **T3** | SSR HTML 站 | 详情页静态 HTML 中直接含 m3u8（或经一层播放页可达） | 每片 1 请求；经播放页则每集 +1 |
+| **T4** | 运行时生成地址 | 有播放器容器但静态 m3u8 数为 0 | 每片 15~40 秒（无头浏览器） |
+
+探测结论连同**证据**一起写入 `sites/<key>.yaml` 的 `detect` 段，30 天有效。判定可解释、可回归测试——这也是为什么 `tests/fixtures/` 里存的是真实响应样本。
+
+---
+
+## T3 实测：详情页不给你地址，只给播放页
+
+T3 承载的是**「普通 HTML 站」**——四类站点里数量最多、样貌最杂的一类。写它的测试时才暴露出一个真实缺口：绝大多数这类站点的详情页**根本不链接媒体文件**，播放列表指向的是**每集一个中间播放页**：
+
+```html
+<!-- 详情页 /voddetail/12345.html —— 三个链接，没有一个是 .m3u8 -->
+<a href="/vodplay/12345-1-1.html">第01集</a>
+<a href="/vodplay/12345-1-2.html">第02集</a>
+<a href="/vodplay/12345-1-3.html">第03集</a>
+
+<!-- 播放页 /vodplay/12345-1-1.html —— 地址在这里 -->
+<script>var player_aaaa={"url":"https:\/\/cdn.example\/hls\/12345\/index.m3u8"}</script>
+```
+
+原实现要求链接必须"长得像媒体"，于是这类站点**整站解析出 0 集、被判为不可采集**——但它其实只差一跳。现在适配器识别"这些链接是页面而不是媒体"并逐集跟随，两种形态共存：
+
+| 形态 | 详情页给什么 | 成本 | 识别方式 |
+|---|---|---|---|
+| A 直链 | 直接是 `.m3u8` 链接 | 每片 1 请求 | 链接匹配媒体后缀 |
+| B 播放页 | 每集一个 `/vodplay/...` 页面 | 每片 1 + 每集 1 请求 | 链接不匹配媒体后缀，按序跟随 |
+
+形态 B 的成本是**每集一次额外请求**，一部 200 集的剧会把请求数翻 200 倍，所以它的上限是独立的、且**截断必然上报**而不是静默发生：
+
+```yaml
+selectors:
+  detail:
+    episodes:
+      - { type: css_list, selector: ".playlist a", name: "::text", url: "::attr(href)" }
+    # 播放页若不是 player_aaaa 变量，用这条覆盖（MacPlayer / player_data / sources 都常见）
+    # play_page_episodes:
+    #   - { type: json_regex, pattern: 'MacPlayer\.playinfo\s*=\s*(\{.*?\})', path: "$.url" }
+    max_play_pages: 60      # 超出会被截断，并在报告里写明 available / walked
+```
+
+集号与集名来自**详情页的链接文本**（第01集、正片……），而不是回头去问播放页"你是第几集"——播放页上的信息通常更不可靠。
+
+同源校验在这条路径上格外重要：只跟随与详情页同一主机的链接，否则一个站点就能把采集器变成任意 URL 的抓取器。
+
+---
+
+## T4 实测：一个站点的完整拆解
+
+`sites/4kvm.yaml` 是本项目对 T4 的参考实现，全部结论都来自实测而非推测。它值得单独说明，因为**只有当地址由运行时生成时，前面的三级才会全部失效**。
+
+**判定链（每一步都有证据）**
+
+| 阶段 | 观察 | 结论 |
+|---|---|---|
+| 前置 | `/robots.txt` 返回 `404 page not found`（Go 的 `net/http` 默认文案） | 不是 PHP/MacCMS，排除 T1 |
+| T1 | 四条标准路径全 404 | 无标准接口 |
+| T2 | `/api/vod/?ac=list` 返回 `{"code":400,"message":"请求路径格式错误"}` | 是自研 REST，非 MacCMS 语义 |
+| T3 | 详情页 **0 个 `.m3u8`**，但有 5 个播放器标记（`data-episode`/`episodeManager`/`artplayer`…） | 结构静态、地址运行时而生成 → **T4** |
+
+**地址从哪来**
+
+`GET /video/play?p=<每集id>&v=<短id>&q=1080&s=<32位签名>&t=<时间戳>&k=<密钥>` 的响应体。`s` 是**签名，无法构造，只能被观察**——这一条就决定了必须用浏览器，也决定了采集只能是离线的批处理而不是按需查询。
+
+**四个只有实测才会发现的坑**
+
+1. **响应体在导航后会被回收。** 第一集能读到，后续集全部读不到——因为延迟 `await response.text()` 时 body 已被浏览器丢弃。改为在路由拦截时**即时**读取（`route.fetch()` → 读体 → `route.fulfill()` 原样回放）。
+2. **无头模式下播放器不拉流。** 实测 35 秒内**没有任何 `.m3u8` 请求**——没有用户手势，hls.js 不会启动。所以「等流请求」这条常规思路在这个站上产出为零，必须读接口响应体。
+3. **点击会被贴片广告层吞掉。** 12 秒的 preroll 遮罩拦截真实指针事件，`page.click` 必然超时。而渲染后的 `[data-episode]` 是 `<a href>`，**直接导航**到每集自己的页面即可完全绕开——既更可靠，也不依赖播放器内部逻辑。
+4. **VIP 条目会返回占位 URL。** `quality_urls` 里锁定的画质 `url` 字段是字面量 `"1"`。必须按 `isvip`/`locked` 标志挑选，靠正则从响应体里"捞" `.m3u8` 迟早会捞出垃圾。
+
+**一个必须诚实说明的限制：付费墙**
+
+实测结果是——**这个站只免费放送第 1 集，第 2 集起需要登录 + VIP**：
+
+```
+第1集 → {"code":200, ... "isvip":false,"locked":false,"url":"<真实m3u8>"}
+第2集 → {"code":401, "message":"请先登录并开通VIP会员", "quality_urls":null}
+第3集 → 连 /video/play 请求都没有
+```
+
+所以针对该站的可采集产出是**每部影片 1 集**。这不是抓取缺陷，是站点运营者刻意的访问控制。绕过它属于破解付费墙，[COMPLIANCE.md](COMPLIANCE.md) 明确排除在外。
+
+流程对此的响应是**识别并如实报告**，而不是产出一个"看起来完整、实际只能播一集"的源：命中拒绝后立即停止该剧的后续集（否则 40 集 × 11 秒 = 白烧 7 分钟），并把 `paywalled_episodes` 计入报告。
+
+**成本模型（据此设预算）**
+
+| 项 | 实测 |
+|---|---|
+| 每集浏览器耗时 | ≈ 5 秒（页面加载 + 接口往返） |
+| 单片（电影） | ≈ 10 秒 |
+| 付费墙站每部影片 | ≈ 12~20 秒（第 2 集即停） |
+
+因此预算是**两个独立维度**——只限片数不够，一部 72 集的全免费剧比 20 部电影还贵：
+
+```yaml
+budget:
+  max_titles_per_run: 50
+  max_episodes_per_run: 250    # 真正的硬上限
+  concurrency: 1               # 绝不针对同一站开两个浏览器会话
+```
+
+---
+
+## 快速开始
+
+### 1. 用 Issue 表单提交站点
+
+打开仓库的 **Issues → New issue → 提交视频站点**，填写站点地址即可。表单只要求一个必填项。
+
+提交后你会收到机器人评论，包含层级、片量、线路数、过滤条目数和订阅地址。
+
+> 注意：所有站点默认 `enabled: false`，**空订阅是默认状态**。启用任何站点都需要你自己决定（见 [COMPLIANCE.md](COMPLIANCE.md)）。
+
+### 2. 在 TVBox 里订阅
+
+```
+https://cdn.jsdelivr.net/gh/<你的用户名>/tvbox-harvest@main/data/tvbox/index.json
+```
+
+三份产物，按需选择：
+
+| 文件 | 内容 | 适用 |
+|---|---|---|
+| `index.json` | 可直连的站点（T1/T2） | 默认订阅 |
+| `index.gateway.json` | 配了网关照的站点（含 T3/T4） | 已部署网关照 |
+| `index.experimental.json` | 全部站点，含实验性 | 排查用 |
+
+单站订阅：`data/tvbox/sites/<key>.json`。
+
+---
+
+## 本地运行
+
+```bash
+# 1) 隔离 venv（Windows 示例；Linux/macOS 换成对应的 python 路径）
+python -m venv .venv
+.venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python -m playwright install chromium   # 仅 T4 站需要
+
+# 2) 让 harvest 可导入
+export PYTHONPATH=src        # Windows: set PYTHONPATH=src
+
+# 3) 探测一个站点：输出层级 + 判定证据
+python -m harvest.cli probe https://www.example.com/ --key mysite
+
+# 4) 采集 + 生成（显式指定站点会覆盖 enabled: false）
+python -m harvest.cli collect --site mysite --mode full --no-browser
+
+# 5) 自检：模拟 TVBox 的三类请求
+python -m harvest.cli verify --targets data/tvbox/index.json
+```
+
+其他命令：
+
+| 命令 | 用途 |
+|---|---|
+| `harvest plan --tiers 1,2` | 输出 GitHub Actions matrix |
+| `harvest generate --flavors direct,gateway` | 不重抓，仅用已有数据重生成 |
+| `harvest doctor` | 体检：配方 schema、过期探测、缺失黑名单 |
+| `harvest prune --keep 7` | 清理 raw 归档 |
+| `harvest purge-cdn` | 刷新 jsDelivr 缓存 |
+
+**离线模式**：设 `HARVEST_OFFLINE=1` 后所有出网被拒。`pytest` 全程不联网——回归测试跑的是 `tests/fixtures/` 里的录制样本。
+
+---
+
+## 加一个新站点
+
+**你不需要写代码，只需要写 YAML。** 这是整个架构的核心承诺：**为"站点类型"写代码，为"每个站点"写配置。**
+
+```bash
+python -m harvest.cli probe https://www.example.com/ --key mysite
+```
+
+探测通过后 `sites/mysite.yaml` 会自动生成并写入 `detect` 证据段。如果自动判定失败（Tier 2 需要字段映射、Tier 3 需要选择器），命令会告诉你缺什么。
+
+以 T1 站为例，最简配方只需要：
+
+```yaml
+key: mysite
+name: 示例站
+base_url: https://www.example.com
+adapter: maccms_v10
+enabled: true
+compliance:
+  policy: block_adult
+  bc_filter: true
+```
+
+仓库内可直接抄的模板：`sites/example-maccms.yaml`（T1）、`sites/validation-lziapi.yaml`（T1 实测）、`sites/4kvm.yaml`（T4 完整注释）。
+
+---
+
+## 仓库结构
+
+```
+src/harvest/
+├── fetch/         http.py（唯一出网点：限速/重试/熔断）、browser.py（T4 嗅探）
+├── probe/         detector.py（四级判定状态机）、signals.py（纯函数信号库）
+├── adapters/      maccms_v10 / json_custom / html_ssr / playwright_sniff
+├── clean/         normalize / dedupe / classify / blacklist / gambling
+└── generate/      tvbox.py、snapshot.py、verify.py、report.py
+
+sites/             站点台账。唯一"人可读可改"的决策中心
+config/            分类映射、黑名单、TVBox 默认值、JSON Schema
+data/              全部机器生成（raw / normalized / snapshot / tvbox / reports）
+gateway/           可选边缘网关（Cloudflare Worker）
+tests/fixtures/    录制的真实响应，离线回归的基准
+```
+
+`src/` 内**不出现任何站点硬编码**。站点知识只存在于 `sites/*.yaml` 与 `tests/fixtures/`。
+
+---
+
+## 自动化
+
+| 触发 | 用途 |
+|---|---|
+| `schedule` 每日 03:17 UTC | 全量采集 |
+| `schedule` 每 6 小时 | T1/T2 增量（`h=24`，一次请求拿全部更新） |
+| `issues: opened` | 用户提交站点 → 登记 → 采集 → 回写评论 |
+| `workflow_dispatch` | 手动指定站点/层级/重探 |
+| `repository_dispatch` | 网关发现快照陈旧时回爬 |
+
+有两个容易踩的坑，本项目已经处理好：
+
+- **jsDelivr 分支缓存默认 12 小时**。push 之后必须调用 `purge.jsdelivr.net`，否则用户最长 12 小时看不到新源——pipeline 看起来"坏了"，其实一直在正常工作。所以 purge 是必需步骤，不是优化项。
+- **Issue body 是不可信输入**。它以环境变量传入 Python，绝不做 shell 插值；只有通过 `validate_public_url`（拒绝内网/回环/链路本地地址）的 URL 才会被请求。相关防护有专门的单测。
+
+---
+
+## 常见问题
+
+**为什么我的源没有出现在 index.json？**
+
+三个可能：站点 `enabled: false`（默认如此）；该站是 T3/T4 但没有配网关，因此只进 `index.experimental.json`；或者 `harvest verify` 没过——模拟客户端调用时列表/详情/搜索任一失败，该站本轮不进入主订阅。
+
+**为什么 JSON 里 `spider` 是空字符串？**
+
+因为不需要。`type: 1` 的 MacCMS JSON 接口本身就够用；带 jar 会让配置依赖一个不由你控制的二进制。
+
+**源站换了域名/改版了怎么办？**
+
+探测结论 30 天过期，且采集失败率超过阈值会自动标记 `detect.stale`，下次先重探。降级链是 T1 → 试 XML 端点 → 降到 T3 解析。同时上一版产物会保留（last-good），不会因为一次失败就把订阅弄空。
+
+**我看到某些条目被过滤掉了，合理吗？**
+
+看 `data/reports/<date>.json` 里的 `filtered` 字段，按理由分类计数，可审计。过滤必须是透明的——一个静默删内容的过滤器比没有过滤器更危险。
+
+---
+
+## 免责声明
+
+本项目是技术工具，不提供、不推荐、不背书任何具体资源站。
+
+- 仓库中不含任何资源站列表；所有站点配方默认停用
+- 使用者对"采集哪些站点、如何使用产物"承担全部责任
+- 请自行确认你的行为符合所在司法辖区的法律法规
+
+详见 [COMPLIANCE.md](COMPLIANCE.md)，其中也包含权利人/站点运营者的移除流程（24 小时内响应）。

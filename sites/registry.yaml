@@ -1,0 +1,50 @@
+# Site ledger. Appended by the Issue workflow; `last_run` is refreshed each run.
+sites:
+- key: example-maccms
+  name: 示例苹果CMS站
+  base_url: https://example.com
+  adapter: maccms_v10
+  tier: 1
+  enabled: false
+  origin:
+    type: template
+  last_run: {}
+- key: example-html-ssr
+  name: 示例HTML站
+  base_url: https://example.com
+  adapter: html_ssr
+  tier: 3
+  enabled: false
+  origin:
+    type: template
+  last_run: {}
+- key: validation-lziapi
+  name: 采集接口验证站
+  base_url: https://cj.lziapi.com
+  adapter: maccms_v10
+  tier: 1
+  enabled: false
+  origin:
+    type: manual
+    note: Tier-1 pipeline validation target
+  last_run:
+    at: '2026-10-16T14:25:08+00:00'
+    status: ok
+    vods: 198
+    lines: 396
+    filtered: 8
+- key: 4kvm
+  name: 4KVM
+  base_url: https://www.4kvm.tv
+  adapter: playwright_sniff
+  tier: 4
+  enabled: false
+  origin:
+    type: manual
+    note: Tier-4 reference implementation
+  last_run:
+    at: '2026-10-16T15:19:27+00:00'
+    status: ok
+    vods: 3
+    lines: 3
+    filtered: 0

@@ -1,0 +1,14 @@
+{
+  "site_key": "4kvm",
+  "name": "detail_series",
+  "url": "https://www.4kvm.tv/play/ch4l5b3mn",
+  "status": 200,
+  "content_type": "text/html; charset=utf-8",
+  "headers": {
+    "server": "nginx/1.29.7",
+    "content-type": "text/html; charset=utf-8"
+  },
+  "truncated": false,
+  "body": "<!DOCTYPE html>\n<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"/><title>某连续剧 - 第1集 -4k影视</title></head><body>\n<div class=\"player\" data-vod-id=\"ch4l5b3mn\"></div>\n<div x-data=\"episodeManager(1, 1, [{ lineName: 'alists', episodeCount: 8 }])\"></div>\n<div id=\"episodes\"><a data-line=\"1\" dataid=\"39063\" data-episode=\"1\">第 1 集</a><a data-line=\"1\" dataid=\"39064\" data-episode=\"2\">第 2 集</a><a data-line=\"1\" dataid=\"39065\" data-episode=\"3\">第 3 集</a><a data-line=\"1\" dataid=\"39066\" data-episode=\"4\">第 4 集</a><a data-line=\"1\" dataid=\"39067\" data-episode=\"5\">第 5 集</a><a data-line=\"1\" dataid=\"39068\" data-episode=\"6\">第 6 集</a><a data-line=\"1\" dataid=\"39069\" data-episode=\"7\">第 7 集</a><a data-line=\"1\" dataid=\"39070\" data-episode=\"8\">第 8 集</a></div>\n<p id=\"player-episode-label\">第 1 集</p>\n<script>\n  window._pdf = \"WyJvc3MuZG91eWluYml0LmNvbSIsIm15b3NzLmRvdXlpbmJpdC50b3AiXQ==\";\n  window.currentUser = { user_id: 0, username: '' };\n</script>\n<script src=\"/static/js/artplayer.54ffaf75.js\" defer></script>\n<script src=\"/static/js/hls.min.last.d92683eb.js\" defer></script>\n</body></html>",
+  "_note": "Curated compact fixture: trimmed to the signals under test, not a full page copy."
+}

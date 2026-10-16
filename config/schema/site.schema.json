@@ -1,0 +1,129 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "tvbox-harvest site recipe",
+  "description": "Declarative adapter configuration for one site. Recipes are the only place site-specific knowledge is allowed to live.",
+  "type": "object",
+  "required": ["key", "name", "base_url"],
+  "additionalProperties": true,
+  "properties": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+      "description": "Unique slug. Appears as the TVBox `key` and as the snapshot directory name."
+    },
+    "name": { "type": "string", "minLength": 1, "description": "Display name shown in TVBox." },
+    "base_url": {
+      "type": "string",
+      "pattern": "^https?://",
+      "description": "Site origin, no trailing slash. Preserve `www` exactly as the site uses it."
+    },
+    "adapter": {
+      "enum": ["maccms_v10", "json_custom", "html_ssr", "playwright_sniff", "auto"],
+      "default": "auto"
+    },
+    "enabled": { "type": "boolean", "default": true },
+    "compliance": {
+      "type": "object",
+      "properties": {
+        "policy": { "enum": ["allow", "block_adult", "quarantine"], "default": "block_adult" },
+        "bc_filter": { "type": "boolean", "default": true },
+        "notes": { "type": ["string", "null"] }
+      }
+    },
+    "request": {
+      "type": "object",
+      "properties": {
+        "headers": { "type": "object", "additionalProperties": { "type": "string" } },
+        "rate_limit": { "type": "number", "exclusiveMinimum": 0, "maximum": 10 },
+        "timeout": { "type": "number", "exclusiveMinimum": 0 },
+        "retries": { "type": "integer", "minimum": 1, "maximum": 10 },
+        "proxy": { "type": ["string", "null"] },
+        "respect_robots": { "type": "boolean" },
+        "delay_jitter": { "type": "number", "minimum": 0 }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "properties": {
+        "type": { "enum": ["none", "token", "md5_sign"] },
+        "token_secret": {
+          "type": ["string", "null"],
+          "description": "NAME of the environment variable holding the credential. Never the credential itself."
+        },
+        "token_query_name": { "type": "string" }
+      }
+    },
+    "maccms": {
+      "type": "object",
+      "properties": {
+        "api_path": { "type": "string" },
+        "categories_all": { "type": "boolean" },
+        "page_limit": { "type": "integer", "minimum": 1 },
+        "max_pages": { "type": "integer", "minimum": 1 },
+        "incremental_hours": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "fields": {
+      "type": "object",
+      "description": "Tier-2 field mapping (JSONPath-lite paths keyed by normalized field name).",
+      "additionalProperties": true
+    },
+    "selectors": {
+      "type": "object",
+      "description": "Tier-3 extraction DSL: list/detail rules.",
+      "additionalProperties": true
+    },
+    "listing": {
+      "type": "object",
+      "description": "Catalogue discovery for Tier 3/4 (pages template + item selector).",
+      "additionalProperties": true
+    },
+    "browser": {
+      "type": "object",
+      "description": "Tier-4 Playwright settings.",
+      "properties": {
+        "wait_until": { "type": "string" },
+        "click_selector": { "type": "string", "description": "May contain the `{ep}` placeholder." },
+        "sniff_patterns": { "type": "array", "items": { "type": "string" } },
+        "read_globals": { "type": "array", "items": { "type": "string" } },
+        "fallback_hosts": { "type": "array", "items": { "type": "string" } },
+        "per_title_timeout": { "type": "number" },
+        "max_episodes_per_title": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "budget": {
+      "type": "object",
+      "properties": {
+        "max_titles_per_run": { "type": "integer", "minimum": 1 },
+        "concurrency": { "type": "integer", "minimum": 1, "maximum": 4 },
+        "keep_traces": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "tvbox": {
+      "type": "object",
+      "description": "Explicit overrides merged on top of the adapter's generated entry.",
+      "properties": {
+        "type": { "type": "integer", "enum": [0, 1, 3] },
+        "api": { "type": "string" },
+        "ext": { "type": "string" },
+        "searchable": { "type": "integer", "enum": [0, 1] },
+        "quickSearch": { "type": "integer", "enum": [0, 1] },
+        "filterable": { "type": "integer", "enum": [0, 1] },
+        "playerType": { "type": "integer" }
+      }
+    },
+    "detect": {
+      "type": "object",
+      "description": "Written back by `harvest probe`. Do not hand-edit unless you know why.",
+      "properties": {
+        "version": { "type": "integer" },
+        "checked_at": { "type": ["string", "null"] },
+        "result": { "type": ["string", "null"] },
+        "tier": { "type": ["integer", "null"] },
+        "status": { "type": ["string", "null"] },
+        "stale": { "type": "boolean" },
+        "evidence": { "type": "object" }
+      }
+    }
+  }
+}

@@ -1,0 +1,114 @@
+# Main entry point: scheduled, manual, and event-driven harvests.
+#
+# All three routes funnel into the same reusable workflow so a cron run and a user-submitted
+# site cannot drift apart.
+
+name: collect
+
+on:
+  schedule:
+    # Daily full crawl. Deliberately off the hour: GitHub's scheduler is congested at :00 and
+    # runs there get delayed or dropped.
+    - cron: "17 3 * * *"
+    # Every 6 hours, Tier 1/2 only. These sites have a proper interface with `h=<hours>`
+    # support, so an incremental pass is a handful of requests.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      sites:
+        description: 站点 key，逗号分隔（留空 = 全部已启用站点）
+        type: string
+        default: ""
+      tiers:
+        description: 层级过滤，例如 "1,2"
+        type: string
+        default: ""
+      mode:
+        description: probe（仅探测）/ full（全量）/ incremental（增量）
+        type: choice
+        options: [probe, full, incremental]
+        default: full
+      limits:
+        description: 附加 CLI 参数，例如 "--max-titles 200"
+        type: string
+        default: ""
+      reprobe:
+        description: 强制重新探测层级
+        type: boolean
+        default: false
+      commit:
+        description: 提交产物到仓库
+        type: boolean
+        default: true
+  repository_dispatch:
+    # Used by the optional edge gateway when it notices its snapshot is stale.
+    types: [refresh-site]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      sites: ${{ steps.pick.outputs.sites }}
+      tiers: ${{ steps.pick.outputs.tiers }}
+      mode: ${{ steps.pick.outputs.mode }}
+      limits: ${{ steps.pick.outputs.limits }}
+      commit: ${{ steps.pick.outputs.commit }}
+    steps:
+      - id: pick
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          # Manual inputs
+          IN_SITES: ${{ inputs.sites }}
+          IN_TIERS: ${{ inputs.tiers }}
+          IN_MODE: ${{ inputs.mode }}
+          IN_LIMITS: ${{ inputs.limits }}
+          IN_REPROBE: ${{ inputs.reprobe }}
+          IN_COMMIT: ${{ inputs.commit }}
+          # repository_dispatch payload
+          DISPATCH_SITE: ${{ github.event.client_payload.site }}
+          # schedule
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            workflow_dispatch)
+              sites="$IN_SITES"; tiers="$IN_TIERS"; mode="$IN_MODE"; limits="$IN_LIMITS"; commit="$IN_COMMIT"
+              if [ "$IN_REPROBE" = "true" ]; then limits="$limits --reprobe"; fi
+              ;;
+            repository_dispatch)
+              sites="$DISPATCH_SITE"; tiers=""; mode="full"; limits="--reprobe"; commit="true"
+              ;;
+            schedule)
+              sites=""; tiers=""; mode="full"; limits=""; commit="true"
+              if [ "$SCHEDULE" = "17 */6 * * *" ]; then
+                # The 6-hourly pass is intentionally narrow: incremental, cheap tiers only.
+                tiers="1,2"; mode="incremental"; limits="--since-hours 24"
+              fi
+              ;;
+            *) sites=""; tiers=""; mode="full"; limits=""; commit="true" ;;
+          esac
+          [ -z "$commit" ] && commit="true"
+          {
+            echo "sites=$sites"
+            echo "tiers=$tiers"
+            echo "mode=$mode"
+            echo "limits=$limits"
+            echo "commit=$commit"
+          } >> "$GITHUB_OUTPUT"
+          echo "resolved: sites='$sites' tiers='$tiers' mode='$mode' limits='$limits'"
+
+  collect:
+    needs: select
+    uses: ./.github/workflows/_collect.yml
+    with:
+      sites: ${{ needs.select.outputs.sites }}
+      tiers: ${{ needs.select.outputs.tiers }}
+      mode: ${{ needs.select.outputs.mode }}
+      limits: ${{ needs.select.outputs.limits }}
+      verify: true
+      commit: ${{ needs.select.outputs.commit == 'true' }}
+    secrets: inherit

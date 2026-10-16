@@ -1,0 +1,134 @@
+# Tier-4 recipe: a site whose play addresses only exist at runtime.
+#
+# This recipe is derived from an actual, measured reconnaissance of the site, not guesswork.
+# The findings that shaped it:
+#
+#   * The catalogue and detail pages are server-rendered (321 distinct /play/{id} links
+#     clustered on the homepage), so listing discovery needs no browser -- plain HTTP is enough.
+#   * /api.php/provide/vod/ and /robots.txt both return `404 page not found`, which is Go's
+#     net/http default body: this is NOT PHP/MacCMS, so Tier 1 is ruled out.
+#   * The play address appears in no static response at all (0 occurrences of `.m3u8` in the
+#     125 KB detail page). The player obtains it at runtime.
+#   * Detail pages DO carry the episode structure statically (`data-episode="1..8"`,
+#     `data-line="1"`, `dataid="39063"...`, Alpine `episodeManager(1, 1, [{lineName:'alists',
+#     episodeCount:8}])`) -- so the *shape* is static even though the *addresses* are not.
+#   * Each episode has its own page. The series id is `ch4l5b3mn` and the episode pages share
+#     its prefix (`ch4l5b3n3`, `ch4l5b3nj`, ...), all present as hrefs in the static HTML.
+#     That is why this recipe navigates between episodes instead of clicking: the rendered
+#     `[data-episode]` elements are anchors, and a 12-second preroll ad overlay intercepts
+#     real pointer events, which makes `page.click` time out.
+#   * The address arrives in the response body of
+#     `GET /video/play?p=<dataid>&v=<sid>&q=1080&s=<32-hex>&t=<ts>&k=<key>`.
+#     Note the `s` signature: it cannot be constructed, only observed. That is precisely why a
+#     browser is required here, and why harvesting is offline/batch rather than on-demand.
+#   * `window._pdf` is a base64 JSON host list; decoded it reads
+#     ["oss.douyinbit.com","myoss.douyinbit.top"]. The player swaps the hostname and retries
+#     when its HLS request fails. Those mirror hosts are surfaced below as `fallback_hosts`,
+#     which the adapter turns into real, user-switchable lines.
+#     Do NOT transcribe this value by hand -- an early version of this file had the second host
+#     misspelled ("douinbit"), which would have produced a line that could never resolve.
+#     tests/test_probe_signals.py cross-checks the recipe against the recorded page for exactly
+#     this reason.
+#
+# COMPLIANCE: this site aggregates content and gates much of it behind paid membership. It is
+# disabled by default and documented in COMPLIANCE.md. Enable it only if you have satisfied
+# yourself that harvesting it is lawful where you are.
+
+key: 4kvm
+name: 4KVM
+base_url: https://www.4kvm.tv
+adapter: playwright_sniff
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Aggregated catalogue with adult titles and injected SEO links. Index-only; no media is
+    hosted or relayed.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0
+      Safari/537.36"
+    Referer: "{base_url}/"
+    Accept-Language: "zh-CN,zh;q=0.9"
+  rate_limit: 0.5          # deliberately gentle: this is a browser-driven crawl
+  timeout: 25
+  retries: 2
+  respect_robots: true
+  delay_jitter: 0.5
+
+# The listings are SSR, so discovery uses cheap HTTP rather than the browser.
+listing:
+  max_pages: 2             # keep the default crawl small; raise deliberately
+  pages:
+    url: "/?page={page}"
+    item: "a[href^='/play/']"
+  categories:
+    - {id: "", name: "全部"}
+
+browser:
+  wait_until: domcontentloaded
+  click_selector: "[data-episode=\"{ep}\"]"
+  # The player asks this endpoint for the address and the response body contains it. Reading
+  # the body is far more reliable than waiting for playback to start, which depends on autoplay
+  # policy, preroll-ad timing and hls.js buffering.
+  capture_body_patterns:
+    - /video/play
+  stop_body_patterns:
+    - '"code":401'
+    - 请先登录
+    - 开通VIP
+  sniff_patterns:
+    - \.m3u8
+    - /m3u8/
+    - /api/vod/.*/play
+  read_globals:
+    - _pdf
+  fallback_hosts:
+    # Verbatim from window._pdf, confirmed against the recorded page in tests/fixtures/4kvm.
+    # `harvest probe` refreshes this list from the live value.
+    - oss.douyinbit.com
+    - myoss.douyinbit.top
+  follow_links: true
+  per_title_timeout: 40
+  per_episode_wait_ms: 12000
+  max_episodes_per_title: 40
+
+budget:
+  # Two independent budget dimensions, because title count alone does not bound the cost: one
+  # 72-episode fully-free series costs far more than twenty single-episode films.
+  #
+  # Measured: ~5s of browser time per episode (page load + play-API round trip). At that rate an
+  # unbounded walk is the one thing that can push a Tier-4 run past its job timeout, so both
+  # dimensions are capped and the second one is the real ceiling.
+  max_titles_per_run: 50
+  max_episodes_per_run: 250     # hard stop for the whole run (~20 min of browser time)
+  concurrency: 1                # never run two browser sessions against one site
+  keep_traces: 2
+
+tvbox:
+  # Tier 4 has no upstream API to point at, so this entry is only usable once the optional
+  # edge gateway is deployed. `{gateway}` is substituted at generation time from the
+  # --gateway flag / HARVEST_GATEWAY variable.
+  type: 1
+  searchable: 1
+  quickSearch: 1
+  filterable: 0
+
+detect:
+  version: 1
+  result: playwright_sniff
+  tier: 4
+  status: ok
+  stale: false
+  evidence: {}
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  page_limit: 20
+  max_pages: 40
+  incremental_hours: 24
+selectors: {}
+probe: {}

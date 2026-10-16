@@ -1,0 +1,70 @@
+name: 提交视频站点
+description: 提交一个可采集的影视站点，Action 会自动探测适配器、采集点播源并生成 TVBox 订阅。
+title: "[站点] "
+labels: ["site-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        提交前请确认：只提交你有权采集的站点。本项目只生成**地址索引**，不托管、不转发任何媒体内容。
+        处理结果会以评论形式回复到本 Issue。
+
+  - type: input
+    id: site_url
+    attributes:
+      label: 站点地址
+      description: 站点首页完整 URL（http/https，必须是公网地址，不接受内网或回环地址）。
+      placeholder: https://www.example.com/
+    validations:
+      required: true
+
+  - type: input
+    id: site_name
+    attributes:
+      label: 站点名称
+      description: 显示在 TVBox 中的名字。留空则自动从域名提取。
+      placeholder: 示例影视
+    validations:
+      required: false
+
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: 适配器类型
+      description: 不确定就选「自动探测」，Action 会按 接口 → 自定义接口 → HTML → 浏览器嗅探 的顺序自动判定。
+      options:
+        - 自动探测
+        - 苹果CMS标准接口
+        - 自定义JSON接口
+        - HTML静态站
+        - 需要浏览器嗅探
+    validations:
+      required: true
+
+  - type: input
+    id: categories
+    attributes:
+      label: 关注分类
+      description: 逗号分隔的分类 ID 或名称，留空为全部。
+      placeholder: 电影,连续剧,动漫
+    validations:
+      required: false
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: 备注
+      description: 已知的接口路径、token 获取方式、详情页样例链接等，有助于加快适配。
+      placeholder: |
+        接口路径：/api.php/provide/vod/
+        详情页样例：https://www.example.com/play/abc123
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: compliance
+    attributes:
+      label: 合规确认
+      options:
+        - label: 我确认该站点可公开访问，提交仅为生成地址索引供个人学习与技术研究，不用于分发受版权保护的内容；我理解最终使用责任由我自己承担。
+          required: true
