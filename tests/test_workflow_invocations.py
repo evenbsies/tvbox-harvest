@@ -73,6 +73,16 @@ def _run_blocks() -> list[tuple[str, str]]:
     return blocks
 
 
+def _executable(run: str) -> str:
+    """Drop full-line shell comments before scanning.
+
+    These workflows annotate themselves heavily, including by quoting the wrong invocation they
+    are warning about (`--verify false` appears verbatim in a comment). Scanning comments would
+    report the documentation as the defect.
+    """
+    return "\n".join(line for line in run.splitlines() if not line.lstrip().startswith("#"))
+
+
 def _invocations() -> list[tuple[str, str, list[str], bool]]:
     """(filename, command, argument tokens, truncated) for every `harvest.cli <cmd>`.
 
@@ -83,7 +93,7 @@ def _invocations() -> list[tuple[str, str, list[str], bool]]:
     out: list[tuple[str, str, list[str], bool]] = []
     for filename, text in _run_blocks():
         # Join backslash-continuations so a multi-line command reads as one logical line.
-        joined = text.replace("\\\n", " ")
+        joined = _executable(text).replace("\\\n", " ")
         for line in joined.splitlines():
             for match in re.finditer(r"harvest\.cli\s+([a-z][a-z0-9-]*)", line):
                 command = match.group(1)
@@ -226,7 +236,7 @@ def test_the_walker_actually_catches_the_original_bug() -> None:
 def test_workflow_commands_are_shell_splittable() -> None:
     """A stray quote in a run block would change how the shell parses the whole command."""
     for filename, text in _run_blocks():
-        for line in text.replace("\\\n", " ").splitlines():
+        for line in _executable(text).replace("\\\n", " ").splitlines():
             if "harvest.cli" not in line:
                 continue
             try:

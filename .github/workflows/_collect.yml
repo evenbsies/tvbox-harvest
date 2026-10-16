@@ -230,8 +230,13 @@ jobs:
         id: summarise
         run: |
           set -euo pipefail
-          python -m harvest.cli summary --github-output "$GITHUB_OUTPUT"
-          echo "::notice::${{ steps.summarise.outputs.summary }}"
+          # Capture stdout into a shell variable and expand it with the shell, not with `${{ }}`.
+          # A step cannot read its own `steps.<id>.outputs`: expressions in `run` are evaluated as
+          # the step starts, before it has written them. The original
+          # `echo "::notice::${{ steps.summarise.outputs.summary }}"` therefore always emitted an
+          # empty notice.
+          line=$(python -m harvest.cli summary --github-output "$GITHUB_OUTPUT")
+          echo "::notice::$line"
 
       - name: Commit and push
         if: inputs.commit
