@@ -77,7 +77,13 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # `pip install -e .` is not optional. The offline test suite passes without it, because
+        # tests/conftest.py puts src/ on sys.path -- but every `python -m harvest.cli ...` step
+        # then dies with ModuleNotFoundError: No module named 'harvest'. Installing the package
+        # also validates pyproject.toml packaging on every run, which is worth knowing about.
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Build matrix
         id: build
@@ -125,7 +131,13 @@ jobs:
           key: pw-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # `pip install -e .` is not optional. The offline test suite passes without it, because
+        # tests/conftest.py puts src/ on sys.path -- but every `python -m harvest.cli ...` step
+        # then dies with ModuleNotFoundError: No module named 'harvest'. Installing the package
+        # also validates pyproject.toml packaging on every run, which is worth knowing about.
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Install Chromium (Tier 4 only)
         if: matrix.needs_browser
@@ -171,7 +183,14 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        # `pip install -e .` is not optional. The offline test suite passes without it, because
+        # tests/conftest.py puts src/ on sys.path -- but every `python -m harvest.cli ...` step
+        # then dies with ModuleNotFoundError: No module named 'harvest'. Installing the package
+        # also validates pyproject.toml packaging on every run, which is worth knowing about.
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Download per-site artefacts
         uses: actions/download-artifact@v4

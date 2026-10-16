@@ -593,10 +593,25 @@ def prune(keep: int = typer.Option(7, "--keep")) -> None:
 def doctor(
     fix: bool = typer.Option(False, "--fix", help="Rewrite recipes whose detect block is stale"),
     learn_bc: bool = typer.Option(False, "--learn-bc", help="Promote recurring BC hosts into the blacklist"),
+    strict: bool = typer.Option(False, "--strict", help="Treat warnings as failures too"),
 ) -> None:
-    """Health-check the repository: recipes, registry, schemas, blacklists, stale detection."""
+    """Health-check the repository: recipes, registry, schemas, blacklists, stale detection.
+
+    Output is split by severity, and the split is a deliberate claim about what a fresh clone
+    looks like.
+
+    ``errors`` mean something is actually wrong: a ledger entry with no recipe, a recipe and
+    ledger that disagree about a URL, or a blacklist file that has gone missing (a filter that
+    silently stops filtering is worse than no filter, so this one blocks).
+
+    ``warnings`` mean "you have not done this yet", which is the normal state of a new clone.
+    An unprobed recipe with ``adapter: auto`` is not broken -- ``collect`` probes it on the fly.
+    Exiting non-zero for that would make every CI run on a fresh fork red, and a check that is
+    always red is a check nobody reads.
+    """
     settings = get_settings()
-    problems: list[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     registry = load_registry(settings)
     console.print(f"registry entries: [bold]{len(registry.sites)}[/bold]")
@@ -604,16 +619,19 @@ def doctor(
     for entry in registry.sites:
         site = load_recipe(entry.key, settings)
         if site is None:
-            problems.append(f"{entry.key}: in registry but has no recipe file")
+            errors.append(f"{entry.key}: in registry but has no recipe file")
             continue
         if site.base_url.rstrip("/") != entry.base_url.rstrip("/"):
-            problems.append(f"{entry.key}: base_url differs between recipe and registry")
+            errors.append(
+                f"{entry.key}: base_url differs between recipe ({site.base_url}) and "
+                f"registry ({entry.base_url})"
+            )
         if site.detect.tier is None:
-            problems.append(f"{entry.key}: never probed")
+            warnings.append(f"{entry.key}: never probed (collect will probe it on the fly)")
         elif site.detect.stale:
-            problems.append(f"{entry.key}: detection marked stale")
+            warnings.append(f"{entry.key}: detection marked stale; re-probe or run --fix")
         if site.adapter == "auto":
-            problems.append(f"{entry.key}: adapter still 'auto'")
+            warnings.append(f"{entry.key}: adapter still 'auto' (resolved at collect time)")
         if site.tier() >= 3 and not (site.probe or {}).get("gateway"):
             console.print(
                 f"[yellow]{entry.key}: Tier {site.tier()} needs a gateway/drpy bridge to be usable in TVBox[/yellow]"
@@ -625,7 +643,7 @@ def doctor(
     for name in ("terms.txt", "regex.txt", "bc_terms.txt", "bc_domains.txt"):
         path = settings.config_dir / "blacklist" / name
         if not path.exists():
-            problems.append(f"missing blacklist file: {path}")
+            errors.append(f"missing blacklist file: {path}")
 
     if learn_bc:
         from collections import Counter
@@ -647,12 +665,22 @@ def doctor(
         reload_blacklists()
         console.print(f"learned BC hosts: {added or 'none'}")
 
-    if problems:
-        console.print("[red]problems found:[/red]")
-        for problem in problems:
-            console.print(f"  - {problem}")
+    for warning in warnings:
+        console.print(f"[yellow]warning[/yellow] {warning}")
+
+    if errors:
+        console.print("[red]errors:[/red]")
+        for error in errors:
+            console.print(f"  - {error}")
+
+    if errors or (strict and warnings):
         raise typer.Exit(code=1)
-    console.print("[green]no problems found[/green]")
+    if warnings:
+        console.print(
+            f"[green]no errors[/green] ({len(warnings)} warning(s); expected on a fresh clone)"
+        )
+    else:
+        console.print("[green]no problems found[/green]")
 
 
 @app.command()

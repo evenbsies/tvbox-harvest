@@ -37,7 +37,14 @@ jobs:
           python-version: "3.13"
           cache: pip
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        # `pip install -e .` is not optional. The offline test suite passes without it, because
+        # tests/conftest.py puts src/ on sys.path -- but every `python -m harvest.cli ...` step
+        # then dies with ModuleNotFoundError: No module named 'harvest'. Installing the package
+        # also validates pyproject.toml packaging on every run, which is worth knowing about.
+        run: |
+          pip install -r requirements.txt
+          pip install -e .
 
       - name: Parse issue into a recipe
         id: parse
