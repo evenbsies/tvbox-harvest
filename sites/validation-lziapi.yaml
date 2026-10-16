@@ -1,13 +1,13 @@
-# Tier-1 recipe used to validate the collection pipeline end-to-end.
+# Tier-1 recipe: a public MacCMS V10 collection interface.
 #
-# This is a *public MacCMS collection interface* -- the standardised `api.php/provide/vod/`
-# endpoint that resource sites publish for others to consume. It is kept here as a live
-# smoke-test target for the Tier-1 path, and it is DISABLED by default: a fresh clone produces
-# an empty subscription, and nothing is harvested until you deliberately enable a site.
-# Read COMPLIANCE.md before enabling anything.
+# This is the standardised `api.php/provide/vod/` endpoint that resource sites publish for others
+# to consume. It arrived here as the pipeline's live smoke-test target and is now ENABLED, which
+# makes it the first real entry in the published subscription.
 #
-# To exercise it locally:
-#     harvest collect --site validation-lziapi --mode full
+# What enabling means, concretely: everything this site returns is harvested on the schedule in
+# .github/workflows/collect.yml, filtered, and committed to `data/`, where jsDelivr serves it as
+# a TVBox subscription. The repository is public, so the index is public. Read COMPLIANCE.md and
+# satisfy yourself about the licensing position before enabling anything else.
 #
 # Note this endpoint is a good example of a real-world MacCMS quirk the pipeline has to handle:
 # it returns perfectly valid JSON under `Content-Type: text/html;charset=utf-8`. Detection
@@ -17,15 +17,15 @@ key: validation-lziapi
 name: 采集接口验证站
 base_url: https://cj.lziapi.com
 adapter: maccms_v10
-enabled: false
+enabled: true
 
 compliance:
   policy: block_adult
   bc_filter: true
   notes: >-
-    Public collection endpoint used only to validate Tier-1 harvesting. Its catalogue is
-    third-party aggregated content; enable it only if you have satisfied yourself that doing so
-    is lawful where you are.
+    Public collection endpoint. Its catalogue is third-party aggregated content; it is enabled
+    here as the first published source, with the operator's knowledge. Disable it by setting
+    `enabled: false` (and removing the registry entry) and re-running generate.
 
 request:
   headers:
