@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -70,6 +71,8 @@ class GeneratedConfig:
     site_count: int
     site_keys: list[str] = field(default_factory=list)
     skipped: list[dict[str, str]] = field(default_factory=list)
+    # Sites that this run had no data for and whose last published entry was carried forward.
+    carried_over: list[str] = field(default_factory=list)
 
     @property
     def digest(self) -> str:
@@ -163,6 +166,25 @@ def write_config(config: dict[str, Any], path: Path) -> None:
     path.write_text(json.dumps(config, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def load_published_entries(path: Path) -> dict[str, dict[str, Any]]:
+    """The site entries of an already-written config, keyed by site key.
+
+    Used to carry forward sites a given run has no data for. Returns an empty mapping when the
+    file is absent or unreadable -- a missing previous config is the normal state on the first
+    run, not an error.
+    """
+    try:
+        config = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    entries: dict[str, dict[str, Any]] = {}
+    if isinstance(config, dict):
+        for entry in config.get("sites") or []:
+            if isinstance(entry, dict) and entry.get("key"):
+                entries[str(entry["key"])] = entry
+    return entries
+
+
 def generate_all(
     pairs: list[tuple[SiteConfig, SiteData | None]],
     *,
@@ -170,8 +192,16 @@ def generate_all(
     gateway_base: str = "",
     flavors: tuple[str, ...] = FLAVORS,
     run_id: str = "",
+    carry_over: Collection[str] = (),
 ) -> list[GeneratedConfig]:
-    """Render every requested flavour from one set of normalized site data."""
+    """Render every requested flavour from one set of normalized site data.
+
+    ``carry_over`` names sites that *should* be published but have no data in this run. Their
+    entries are copied forward from the flavour's existing file. Without it, a run covering a
+    subset of sites produces a config listing only that subset -- so accepting one new site
+    through the Issue form would silently replace the whole published subscription with a
+    single entry. The daily full run masks this; any single-site run exposes it.
+    """
     settings = settings or get_settings()
     defaults = load_tvbox_defaults(settings)
     name_suffix = bool((defaults.get("name_suffix") or {}).get("enabled"))
@@ -225,15 +255,45 @@ def generate_all(
             entries.append(entry)
             keys.append(site.key)
 
+        path = tvbox_dir / FLAVOR_FILES[flavor]
+
+        # Carry forward enabled sites this run has no data for. Read the previous file *before*
+        # overwriting it, and only for keys the caller says should be published -- a site that
+        # has since been disabled must disappear from the config, not live on in a stale entry.
+        carried: list[str] = []
+        if carry_over:
+            existing = load_published_entries(path)
+            for key in carry_over:
+                if key in keys or key not in existing:
+                    continue
+                entries.append(existing[key])
+                keys.append(key)
+                carried.append(key)
+
+        # Deterministic order regardless of which subset was harvested: without this, a partial
+        # run appends its carried entries after the fresh ones and every run reshuffles the file.
+        entries.sort(key=lambda item: str(item.get("key") or ""))
+        keys = [str(item.get("key") or "") for item in entries]
+
         config = build_config(
             entries=entries, defaults=defaults, run_id=run_id, gateway_base=gateway_base,
             flavor=flavor,
         )
         if skipped:
             config["_skipped"] = skipped
-        path = tvbox_dir / FLAVOR_FILES[flavor]
+        if carried:
+            config["_carried_over"] = sorted(carried)
         write_config(config, path)
-        out.append(GeneratedConfig(flavor=flavor, path=path, site_count=len(entries), site_keys=keys, skipped=skipped))
+        out.append(
+            GeneratedConfig(
+                flavor=flavor,
+                path=path,
+                site_count=len(entries),
+                site_keys=keys,
+                skipped=skipped,
+                carried_over=sorted(carried),
+            )
+        )
 
     # Convenience alias: `index.direct.json` is what the README tells users to fall back to
     # when they have not deployed a gateway, so keep it present even when it duplicates.

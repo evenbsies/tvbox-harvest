@@ -10,8 +10,21 @@ site is exercised the way a client would exercise it:
 
 Entries that cannot be verified *without* a bridge (Tier 3/4 with no gateway configured) are
 verified against their own snapshot instead, and reported as such rather than silently
-passing. A site that fails is dropped from the default flavour for this run while its
-last-good artefacts stay in place.
+passing.
+
+**This step is advisory: it reports, it does not remove.** An earlier version of this docstring
+claimed a failing site was "dropped from the default flavour for this run", which was never
+implemented -- nothing consumed the failure set, and the workflow invokes verify with
+``|| echo "::warning::"``. That is worth stating plainly rather than leaving as a claim in a
+docstring.
+
+Why not implement the dropping? A verification failure is a network observation, not a
+statement about the source. One timeout, one rate-limit, one upstream restart would silently
+remove a working source from every subscriber's list until the next full run -- a worse
+outcome than serving a temporarily unreachable entry. What the pipeline does instead is make
+the failure loud: it lands in the run report, the run summary, and (through the report) the
+Issue thread. A future revision could demote a site after *repeated* failures; a single one
+must not be enough.
 """
 
 from __future__ import annotations
@@ -248,7 +261,3 @@ async def verify_config_file(
         if owned:
             await client.aclose()
     return results
-
-
-def failed_keys(results: list[VerifyResult]) -> set[str]:
-    return {r.key for r in results if r.status == "failed"}

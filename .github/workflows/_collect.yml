@@ -217,6 +217,10 @@ jobs:
             --gateway "$GATEWAY" --run-id "${{ github.run_id }}"
 
       - name: Verify generated config
+        # Advisory on purpose. A failed verify is a network observation, not a verdict on the
+        # source, so it must not remove an entry: one upstream hiccup would strip a working
+        # source from every subscriber until the next full run. The failure is surfaced in the
+        # run summary and the report artefact instead, which is where a human can act on it.
         if: inputs.verify
         run: |
           set -euo pipefail

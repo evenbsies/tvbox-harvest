@@ -35,6 +35,7 @@ from harvest.pipeline import (
     load_registry,
     recipe_path,
     registry_entry_from,
+    resolve_sites,
     run_pipeline,
     save_recipe,
     save_registry,
@@ -205,8 +206,19 @@ def generate(
     flavors: str = typer.Option(",".join(tvbox_mod.FLAVORS), "--flavors"),
     gateway: str = typer.Option("", "--gateway"),
     run_id: str = typer.Option("", "--run-id"),
+    carry_over: bool = typer.Option(
+        True,
+        "--carry-over/--no-carry-over",
+        help="Keep published entries for enabled sites this run has no data for",
+    ),
 ) -> None:
-    """Rebuild TVBox configs from existing normalized data, without re-harvesting."""
+    """Rebuild TVBox configs from existing normalized data, without re-harvesting.
+
+    Data on disk is only ever the subset that the most recent collect produced. Everything else
+    that should be published is carried forward from the previous config, because the alternative
+    is worse: a run covering one site would otherwise publish a one-site subscription, and the
+    Issue intake path always runs one site at a time.
+    """
     settings = get_settings()
     pairs: list[tuple[SiteConfig, Any]] = []
     for path in sorted(settings.normalized_dir.glob("*.json")):
@@ -222,15 +234,32 @@ def generate(
         console.print("[red]no normalized data found; run `harvest collect` first[/red]")
         raise typer.Exit(code=1)
 
+    # The sites that ought to be in the published config: every enabled registry site. This is
+    # the same rule the collect pipeline uses to pick sites, deliberately -- two different
+    # notions of "should be published" is how a config ends up disagreeing with the ledger.
+    keep: set[str] = set()
+    if carry_over:
+        keep = {site.key for site in resolve_sites(RunOptions(sites=[], mode="full"), settings)}
+
     generated = tvbox_mod.generate_all(
         pairs,
         settings=settings,
         gateway_base=gateway,
         flavors=tuple(f.strip() for f in flavors.split(",") if f.strip()),
         run_id=run_id,
+        carry_over=keep,
     )
     for item in generated:
         console.print(f"[green]{item.flavor}[/green] -> {item.path} ({item.site_count} sites)")
+        if item.skipped:
+            for skip in item.skipped:
+                console.print(f"  skipped {skip['key']}: {skip['reason']}")
+        if item.carried_over:
+            # Say it out loud: a carried-forward entry is last-run data, not this run's.
+            console.print(
+                f"  [yellow]carried over {len(item.carried_over)} site(s) with no data this "
+                f"run: {', '.join(item.carried_over)}[/yellow]"
+            )
 
 
 @app.command()
@@ -296,7 +325,7 @@ def plan(
         sites=[s.strip() for s in sites.split(",") if s.strip()],
         tiers=[int(t) for t in tiers.split(",") if t.strip().isdigit()],
     )
-    configs = __import__("harvest.pipeline", fromlist=["resolve_sites"]).resolve_sites(options, settings)
+    configs = resolve_sites(options, settings)
 
     include: list[dict[str, Any]] = []
     for config in configs:
