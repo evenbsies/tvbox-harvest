@@ -176,20 +176,47 @@ https://cdn.jsdelivr.net/gh/<你的用户名>/tvbox-harvest@main/data/tvbox/inde
 # 1) 隔离 venv（Windows 示例；Linux/macOS 换成对应的 python 路径）
 python -m venv .venv
 .venv/Scripts/python -m pip install -r requirements.txt
+.venv/Scripts/python -m pip install -e .               # 让 harvest 可导入
 .venv/Scripts/python -m playwright install chromium   # 仅 T4 站需要
 
-# 2) 让 harvest 可导入
-export PYTHONPATH=src        # Windows: set PYTHONPATH=src
+# 2) 探测一个站点：输出层级 + 判定证据
+harvest probe https://www.example.com/ --key mysite
 
-# 3) 探测一个站点：输出层级 + 判定证据
-python -m harvest.cli probe https://www.example.com/ --key mysite
+# 3) 采集 + 生成（显式指定站点会覆盖 enabled: false）
+harvest collect --site mysite --mode full --no-browser
 
-# 4) 采集 + 生成（显式指定站点会覆盖 enabled: false）
-python -m harvest.cli collect --site mysite --mode full --no-browser
-
-# 5) 自检：模拟 TVBox 的三类请求
-python -m harvest.cli verify --targets data/tvbox/index.json
+# 4) 自检：模拟 TVBox 的三类请求
+harvest verify --targets data/tvbox/index.json
 ```
+
+> **为什么要 `pip install -e .` 而不是设 `PYTHONPATH=src`？**
+>
+> 因为不装包时，`pytest` 依然会全绿——`tests/conftest.py` 会自己把 `src/` 塞进 `sys.path`——但
+> 每一个 `harvest ...` / `python -m harvest.cli ...` 都会报 `ModuleNotFoundError`。CI 最初就是这样
+> 挂的：测试通过，命令行全废。装成包能让本地和 CI 走同一条路径。
+
+### 改依赖时必须用全新 venv 验证
+
+`requirements.txt` 里声明的版本，必须是**真的验证过**的那些。这两者一旦分家，本地就永远看不见 CI 的失败。
+
+这不是假想问题。`requirements.txt` 曾经声明 `typer~=0.12.5`（一个依赖 click 的旧版），而开发机上是
+typer 0.27.3（已经完全不依赖 click）。CI 严格按照文件装了 typer 0.12.5 + 最新 click 8.5.0，两者不兼容：
+
+```
+TypeError: Secondary flag is not valid for non-boolean flag.
+```
+
+本地全绿，CI 全红，因为跑的根本不是同一套依赖。所以：
+
+```bash
+python -m venv .venv-fresh
+.venv-fresh/bin/pip install -r requirements.txt
+.venv-fresh/bin/pip install -e .
+.venv-fresh/bin/pytest -q          # 这才是 CI 会看到的结果
+```
+
+`tests/test_cli_surface.py` 会在本地就抓住上面那类错误：它强制构造整个命令树，而选项声明一旦与
+安装的 Typer/Click 不匹配，构造本身就会抛异常——不需要等到推上去跑一轮 CI。
 
 其他命令：
 
@@ -197,7 +224,7 @@ python -m harvest.cli verify --targets data/tvbox/index.json
 |---|---|
 | `harvest plan --tiers 1,2` | 输出 GitHub Actions matrix |
 | `harvest generate --flavors direct,gateway` | 不重抓，仅用已有数据重生成 |
-| `harvest doctor` | 体检：配方 schema、过期探测、缺失黑名单 |
+| `harvest doctor` | 体检：配方 schema、过期探测、缺失黑名单；`--strict` 把警告也当失败 |
 | `harvest prune --keep 7` | 清理 raw 归档 |
 | `harvest purge-cdn` | 刷新 jsDelivr 缓存 |
 

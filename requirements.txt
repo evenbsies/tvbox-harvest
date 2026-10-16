@@ -1,19 +1,38 @@
-httpx[http2]~=0.27.2
-selectolax~=0.3.21
-pydantic~=2.9.2
-pydantic-settings~=2.6.0
-PyYAML~=6.0.2
-ruamel.yaml~=0.18.6
-orjson~=3.10.7
-tenacity~=9.0.0
-structlog~=24.4.0
-typer~=0.12.5
-rich~=13.9.2
-playwright~=1.48.0
+# Pinned to the versions this project is actually verified against.
+#
+# That sentence is doing real work. This file previously declared an older set than the one the
+# code was developed and tested on (typer 0.12.5 while the developer machine had 0.27.3, and
+# similar drift on selectolax, pydantic, playwright and pytest). The result was a first CI run
+# that failed with:
+#
+#     TypeError: Secondary flag is not valid for non-boolean flag.
+#
+# because `typer~=0.12.5` drives click, and click was resolved to 8.5.0 -- an old typer emitting
+# options that a much newer click refuses. Locally it worked, because the machine had typer 0.27.3,
+# which no longer depends on click at all. The declared environment was fiction, and nothing local
+# could reveal that.
+#
+# So: when changing a version here, verify against a *fresh* venv built from this file. Editing a
+# long-lived local venv is exactly what produced the drift above.
+#
+#   python -m venv .venv-fresh && .venv-fresh/bin/pip install -r requirements.txt && pytest -q
+
+httpx[http2]~=0.28.1
+selectolax~=1.0.0
+pydantic~=2.14.1
+pydantic-settings~=2.16.0
+PyYAML~=6.0.3
+ruamel.yaml~=0.19.1
+orjson~=3.13.0
+tenacity~=9.2.1
+structlog~=26.1.0
+typer~=0.27.3
+rich~=15.0.0
+playwright~=1.64.0
 python-dateutil~=2.9.0
-jsonschema~=4.23.0
+jsonschema~=4.26.0
 
 # dev
-pytest~=8.3.3
-pytest-asyncio~=0.24.0
-respx~=0.21.1
+pytest~=9.1.1
+pytest-asyncio~=1.4.0
+respx~=0.23.1

@@ -7,24 +7,27 @@ name = "tvbox-harvest"
 version = "0.1.0"
 description = "Auto-harvest video VOD sources from submitted sites and generate TVBox-compatible subscription JSON"
 requires-python = ">=3.11"
+# Kept in lockstep with requirements.txt, which is the file CI installs. See the header comment
+# there: the two drifting apart is how a broken declared environment stayed invisible.
 dependencies = [
-    "httpx[http2]~=0.27.2",
-    "selectolax~=0.3.21",
-    "pydantic~=2.9.2",
-    "pydantic-settings~=2.6.0",
-    "PyYAML~=6.0.2",
-    "orjson~=3.10.7",
-    "tenacity~=9.0.0",
-    "structlog~=24.4.0",
-    "typer~=0.12.5",
-    "rich~=13.9.2",
-    "playwright~=1.48.0",
+    "httpx[http2]~=0.28.1",
+    "selectolax~=1.0.0",
+    "pydantic~=2.14.1",
+    "pydantic-settings~=2.16.0",
+    "PyYAML~=6.0.3",
+    "ruamel.yaml~=0.19.1",
+    "orjson~=3.13.0",
+    "tenacity~=9.2.1",
+    "structlog~=26.1.0",
+    "typer~=0.27.3",
+    "rich~=15.0.0",
+    "playwright~=1.64.0",
     "python-dateutil~=2.9.0",
-    "jsonschema~=4.23.0",
+    "jsonschema~=4.26.0",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest~=8.3.3", "pytest-asyncio~=0.24.0", "respx~=0.21.1"]
+dev = ["pytest~=9.1.1", "pytest-asyncio~=1.4.0", "respx~=0.23.1"]
 
 [project.scripts]
 harvest = "harvest.cli:app"
