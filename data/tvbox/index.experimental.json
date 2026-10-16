@@ -25,7 +25,10 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-38932437617",
-  "generated_at": "2026-10-16T16:31:48+00:00",
-  "generated_by": "tvbox-harvest"
+  "version": "experimental-38937205235",
+  "generated_at": "2026-10-16T17:08:30+00:00",
+  "generated_by": "tvbox-harvest",
+  "_carried_over": [
+    "validation-lziapi"
+  ]
 }
