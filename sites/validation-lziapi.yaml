@@ -59,7 +59,28 @@ detect:
   tier: 1
   status: ok
   stale: false
-  evidence: {}
+  evidence:
+    stages:
+      - stage: preflight
+        status: 403
+        server: cloudflare
+        robots_status: 403
+        go_default_404: false
+      - stage: tier1_match
+        path: /api.php/provide/vod/
+        trailing_slash: true
+        total: 159395
+        class_entries: 44
+        sample_id: '133530'
+        detail_verified: true
+    notes: []
+    facts:
+      server: cloudflare
+      html_bytes: 273
+      is_html: true
+      maccms_markers: []
+      detail_link_clusters: []
+  checked_at: '2026-10-16T17:25:15+00:00'
 browser: {}
 selectors: {}
 probe: {}
