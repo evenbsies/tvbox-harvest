@@ -1,0 +1,40 @@
+key: site
+name: 采集接口验证站
+base_url: https://cj.lziapi.com
+adapter: auto
+enabled: true
+compliance:
+  policy: block_adult
+  bc_filter: true
+request:
+  headers:
+    User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) 
+      Chrome/120.0.0.0 Safari/537.36
+    Accept-Language: zh-CN,zh;q=0.9,en;q=0.8
+  rate_limit: 1.0
+  timeout: 15.0
+  retries: 3
+  respect_robots: true
+  delay_jitter: 0.3
+auth:
+  type: none
+  token_query_name: token
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  page_limit: 20
+  max_pages: 40
+  incremental_hours: 24
+tvbox: {}
+detect:
+  version: 1
+  stale: false
+  evidence: {}
+fields: {}
+selectors: {}
+browser: {}
+listing: {}
+budget: {}
+probe: {}
+notes: 自动化验证 Issue 受理闭环（重复提交分支），可随时关闭。
+_generated_by: harvest
