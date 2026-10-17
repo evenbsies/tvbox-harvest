@@ -37,7 +37,11 @@ key: zhuiying
 name: 追影
 base_url: https://zhuiying3.cc
 adapter: playwright_sniff
-enabled: false
+# First T4 site enabled. It is the only candidate with a measured end-to-end result (real
+# `.m3u8` + SPS 1920x1080 + mirror hosts expanded into lines), and it is the site that most
+# needs the gateway -- so it is also the fastest way to find out whether the gateway carries
+# a Tier-4 source at all. Budget is capped at 30 titles / 120 episodes per run.
+enabled: true
 
 compliance:
   policy: block_adult
