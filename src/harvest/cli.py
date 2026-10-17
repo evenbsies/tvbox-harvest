@@ -135,6 +135,16 @@ def collect(
     since_hours: int | None = typer.Option(None, "--since-hours"),
     max_titles: int | None = typer.Option(None, "--max-titles"),
     max_requests: int | None = typer.Option(None, "--max-requests"),
+    lines_keep: str = typer.Option(
+        "",
+        "--lines-keep",
+        help="Only keep play lines whose name matches (regex, comma-separated). e.g. 4K",
+    ),
+    lines_drop: str = typer.Option(
+        "",
+        "--lines-drop",
+        help="Drop play lines whose name matches (regex, comma-separated)",
+    ),
     max_episodes: int = typer.Option(
         0,
         "--max-episodes",
@@ -161,6 +171,8 @@ def collect(
         max_titles=max_titles,
         max_requests=max_requests,
         max_episodes=max_episodes or None,
+        line_keep=[x.strip() for x in lines_keep.split(",") if x.strip()],
+        line_drop=[x.strip() for x in lines_drop.split(",") if x.strip()],
         gateway_base=gateway,
         flavors=tuple(f.strip() for f in flavors.split(",") if f.strip()),
         reprobe=reprobe,
@@ -191,6 +203,14 @@ def _print_run_report(report) -> None:  # noqa: ANN001 - RunReport, avoids a cir
             str(site.elapsed_ms),
         )
     console.print(table)
+
+    # Per-site errors used to live only in the JSON report: a run that failed for a reason the
+    # operator could act on ("no line matched; here are the lines that exist") printed a row of
+    # zeros and nothing else.
+    for site in report.sites:
+        for err in site.errors[:3]:
+            where = err.get("where") or "run"
+            console.print(f"  [red]{site.key}[/red] {where}: {err.get('error')}")
 
     for item in report.generated:
         console.print(
@@ -840,6 +860,67 @@ def scorecard(
     console.print(
         "[dim]未测量显示为 —，与 0 不同：0 是量到了零，— 是没量到。如何权衡由你决定。[/dim]"
     )
+
+
+@app.command()
+def lines(
+    url: str = typer.Argument(..., help="Site home URL to inspect"),
+    sample: int = typer.Option(6, "--sample", help="How many titles to open"),
+    browser: bool = typer.Option(False, "--browser", help="Allow a headless browser (Tier 4)"),
+    match: str = typer.Option("", "--match", help="Mark lines matching this regex, e.g. 4K"),
+    as_json: bool = typer.Option(False, "--json", help="Emit raw output as JSON"),
+) -> None:
+    """List the play lines a site offers per title (闪电 / 非凡 / 量子 / 4K ...).
+
+    A detail page usually offers several sources for the same film. Before filtering with
+    `collect --lines-keep 4K`, this tells you whether any line there is actually named 4K --
+    including the case where the site does not label its lines at all, in which case no filter
+    can honestly match. Nothing is written to the working tree.
+    """
+    import re as _re
+
+    from harvest.scorecard import inspect_lines
+
+    try:
+        report = asyncio.run(inspect_lines(url, sample=sample, allow_browser=browser))
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    if as_json:
+        print(json.dumps(report.as_dict(), ensure_ascii=False, indent=2))
+        return
+
+    console.print(f"[bold]{report.base_url}[/bold] · tier {report.tier or '?'} · {report.adapter}")
+    if report.errors:
+        for message in report.errors:
+            console.print(f"  [yellow]{message}[/yellow]")
+    if not report.sampled:
+        console.print("[yellow]没有采到任何条目，看不到线路名[/yellow]")
+        return
+
+    table = Table(title=f"线路名（抽样 {report.sampled} 部）", header_style="bold")
+    table.add_column("线路名")
+    table.add_column("出现在几部", justify="right")
+    table.add_column("匹配", justify="center")
+    pattern = _re.compile(match, _re.IGNORECASE) if match else None
+    for name, count in report.names.items():
+        mark = ""
+        if pattern is not None:
+            mark = "✓" if pattern.search(name) else ""
+        table.add_row(name, str(count), mark)
+    console.print(table)
+
+    for row in report.per_title:
+        detail = "，".join(f"{line['name']}({line['episodes']}集)" for line in row["lines"])
+        console.print(f"  [dim]{row['title']}[/dim]：{detail}")
+
+    unnamed = report.names.get("—", 0)
+    if unnamed:
+        console.print(
+            f"  [dim]{unnamed} 部没有可读的线路名——这类站点无法凭名字判定 4K，"
+            "`--lines-keep 4K` 会把它们全部排除，这是正确结果，不是缺陷。[/dim]"
+        )
 
 
 @app.command("update-ledger")

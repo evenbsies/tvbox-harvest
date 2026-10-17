@@ -132,6 +132,8 @@ class SiteConfig(BaseModel):
     browser: dict[str, Any] = Field(default_factory=dict)
     listing: dict[str, Any] = Field(default_factory=dict)
     budget: dict[str, Any] = Field(default_factory=dict)
+    #: Play-line selection: `keep: ["4K"]` / `drop: ["广告"]`, matched against the line name.
+    lines: dict[str, Any] = Field(default_factory=dict)
     probe: dict[str, Any] = Field(default_factory=dict)
     notes: str | None = None
 

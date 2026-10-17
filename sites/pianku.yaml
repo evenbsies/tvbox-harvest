@@ -1,0 +1,83 @@
+# Tier-3 recipe: a MacCMS template whose collection API is switched off.
+#
+# Measured 2026-10-17:
+#   * `/api.php/provide/vod/` answers **`closed`** as plain text -- the site is MacCMS
+#     (`var maccms = {...}`, /voddetail/, /vodtype/, /vodplay/ routes) with collection disabled.
+#     Tier 1 is therefore unavailable and the HTML has to be read instead.
+#   * Detail pages carry the play sources as tabs: `span.source-tab-item[data-target]` with the
+#     name as text (observed: 备用线路 / 奇异 / 优酷 / 自营) and one pane per source holding that
+#     source's episode links (`/vodplay/{id}-{line}-{ep}.html`). This is the shape the
+#     `selectors.detail.lines` block below describes.
+#   * Those episode links are **play pages, not media**. The address appears only there, so
+#     Tier 3 costs one extra request per episode (`_episodes_via_play_pages`). That is the honest
+#     cost of a site that hides its addresses behind a player.
+#
+# COMPLIANCE: aggregated third-party catalogue. Index-only, disabled by default.
+
+key: pianku
+name: 片库
+base_url: https://4k01.pianku.online
+adapter: html_ssr
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Aggregated catalogue. Index-only: line names and play-page addresses are recorded, nothing is
+    downloaded or relayed.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0
+      Safari/537.36"
+    Accept-Language: "zh-CN,zh;q=0.9"
+  rate_limit: 1.0
+  timeout: 20
+  retries: 2
+  respect_robots: true
+
+listing:
+  max_pages: 1
+  pages:
+    url: "/vodtype/{cat}.html"
+    item: "a[href^='/voddetail/']"
+  categories:
+    - {id: "20", name: 电影}
+    - {id: "37", name: 剧集}
+    - {id: "43", name: 动漫}
+
+selectors:
+  detail:
+    title: "h1::text"
+    # One Line per play source, named the way the site names it. Without this block the adapter
+    # collapses every source into a single "线路1" and `--lines-keep 4K` has nothing to match.
+    lines:
+      item: "span.source-tab-item"
+      pane_attr: data-target
+      pane: "#{id}"
+      link: "a[href*='/vodplay/']"
+  list:
+    cluster_pattern: "/voddetail/"
+
+budget:
+  max_titles_per_run: 30
+  max_requests_per_site: 400
+
+tvbox:
+  type: 3
+  searchable: 0
+  quickSearch: 0
+  filterable: 0
+detect:
+  version: 1
+  stale: false
+  evidence: {}
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  page_limit: 20
+  max_pages: 40
+  incremental_hours: 24
+browser: {}
+probe: {}

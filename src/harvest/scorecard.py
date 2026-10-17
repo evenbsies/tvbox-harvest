@@ -115,6 +115,103 @@ def _ratio(part: int, whole: int) -> float | None:
     return round(part / whole, 4) if whole else None
 
 
+@dataclass
+class LineReport:
+    """What play lines a site actually offers, so "is there a 4K line" stops being a guess."""
+
+    url: str
+    base_url: str
+    tier: int = 0
+    adapter: str = ""
+    sampled: int = 0
+    names: dict[str, int] = field(default_factory=dict)
+    per_title: list[dict[str, Any]] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "base_url": self.base_url,
+            "tier": self.tier,
+            "adapter": self.adapter,
+            "sampled": self.sampled,
+            "lines": self.names,
+            "per_title": self.per_title,
+            "errors": self.errors,
+        }
+
+
+async def inspect_lines(
+    url: str,
+    *,
+    sample: int = 6,
+    allow_browser: bool = False,
+    settings: Settings | None = None,
+) -> LineReport:
+    """Sample a few titles and report every play-line name they offer.
+
+    The question this answers is narrow and practical: before setting `--lines-keep 4K` on a
+    site, does any title there actually carry a line named 4K? Asking the site is cheaper than
+    discovering it after a full harvest has filtered itself down to nothing.
+    """
+    from harvest.clean.lines import line_names
+    from harvest.cli import validate_public_url
+    from harvest.probe.detector import normalize_base_url
+
+    settings = settings or get_settings()
+    ok, url_or_error = validate_public_url(url)
+    if not ok:
+        raise ValueError(url_or_error)
+
+    base = normalize_base_url(url_or_error)
+    site = _recipe_for_host(base, settings) or SiteConfig(
+        key="lines", name="lines", base_url=base, adapter="auto", enabled=True
+    )
+    report = LineReport(url=url_or_error, base_url=base)
+    pinned = site.adapter != "auto"
+
+    async with HttpClient(settings) as http:
+        probe = await run_probe(site, http, settings=settings, allow_browser=allow_browser)
+        report.tier = probe.tier
+        report.adapter = str(probe.adapter)
+        if pinned:
+            # The recipe is the site's definition: it knows the tier and the adapter, while the
+            # probe may legitimately come back inconclusive for a site whose play address only
+            # exists at runtime. Reporting the probe's "unknown" as the site's tier would
+            # misdescribe a site that collects perfectly well.
+            report.tier = site.tier()
+            report.adapter = str(site.adapter)
+            if probe.status != "ok":
+                report.errors.append(
+                    f"探测 status={probe.status}，按配方 {site.adapter}（T{site.tier()}）继续"
+                )
+        elif probe.status == "ok":
+            site = apply_probe_patch(site, probe)
+        else:
+            report.errors.append(f"探测未完成（status={probe.status}），无法确定适配器")
+            return report
+
+        options = RunOptions(
+            mode="full", max_titles=sample, allow_browser=allow_browser, verify=False, dry_run=True
+        )
+        data, ctx = await run_collect(site, http, settings=settings, options=options)
+        report.sampled = data.vod_count
+        report.errors.extend(str(e.get("error", e)) for e in ctx.errors)
+
+    report.names = line_names(data)
+    for vod in data.vods[:sample]:
+        report.per_title.append(
+            {
+                "title": vod.name,
+                "lines": [
+                    {"name": (line.name or "").strip() or "—", "episodes": len(line.episodes)}
+                    for line in vod.lines
+                ],
+            }
+        )
+    return report
+
+
 async def score(
     url: str,
     *,

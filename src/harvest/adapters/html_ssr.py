@@ -32,7 +32,13 @@ from typing import Any, ClassVar
 from urllib.parse import urljoin, urlparse
 
 from harvest.adapters.base import CollectContext, empty_site_data, register
-from harvest.adapters.extractors import apply_rule, scan_m3u8_literals
+from harvest.adapters.extractors import (
+    apply_rule,
+    node_attributes,
+    node_text,
+    parse_html,
+    scan_m3u8_literals,
+)
 from harvest.clean.normalize import extract_year, strip_html
 from harvest.models import Episode, Line, SiteConfig, SiteData, Vod, compute_sid
 
@@ -200,6 +206,60 @@ class HtmlSsrAdapter:
 
     # -- detail parsing ------------------------------------------------------------------
 
+
+    def _lines_from_tabs(
+        self, html: str, base_url: str, selectors: dict[str, Any]
+    ) -> list[Line] | None:
+        """Read the play-source tabs and their panes, one Line per tab.
+
+        Why this matters: the same film is offered on several sources at once -- 备用线路 / 奇异 /
+        优酷 / 自营 -- and sometimes one of them is named `4K`. Collapsing them into a single
+        "线路1" makes that distinction unreadable, and it is exactly the distinction a caller
+        filtering with `--lines-keep 4K` needs. Configured declaratively because every template
+        names its tabs differently:
+
+            selectors:
+              detail:
+                lines:
+                  item: "span.source-tab-item"     # tab element; its text is the line name
+                  pane_attr: data-target            # attribute naming the pane id (optional)
+                  pane: "#{id}"                     # pane selector template (optional)
+                  link: "a[href*='/vodplay/']"      # episode anchors inside the pane
+        """
+        cfg = selectors.get("lines")
+        if not isinstance(cfg, dict) or not cfg.get("item"):
+            return None
+
+        doc = parse_html(html)
+        if doc is None:
+            return None
+        item_selector = str(cfg["item"])
+        pane_attr = str(cfg.get("pane_attr") or "data-target")
+        pane_template = str(cfg.get("pane") or "#{id}")
+        link_selector = str(cfg.get("link") or "a[href]")
+
+        lines: list[Line] = []
+        for tab in doc.css(item_selector):
+            name = node_text(tab).strip()
+            attrs = node_attributes(tab)
+            pane_id = attrs.get(pane_attr, "").strip()
+            if not pane_id:
+                # No pane reference: the tab names a source we cannot scope episodes to.
+                continue
+            pane_css = pane_template.replace("{id}", pane_id)
+            anchors = doc.css(f"{pane_css} {link_selector}")
+            episodes: list[Episode] = []
+            for anchor in anchors:
+                href = (node_attributes(anchor) or {}).get("href", "").strip()
+                if not href:
+                    continue
+                absolute = urljoin(base_url, href)
+                label = node_text(anchor).strip() or f"第{len(episodes) + 1:02d}集"
+                episodes.append(Episode(index=len(episodes) + 1, name=label, url=absolute))
+            if episodes:
+                lines.append(Line(name=name or f"线路{len(lines) + 1}", episodes=episodes))
+        return lines or None
+
     async def _parse_detail(self, site: SiteConfig, url: str, ctx: CollectContext) -> Vod | None:
         html = await self._get_text(url, site, ctx)
         if not html:
@@ -224,7 +284,11 @@ class HtmlSsrAdapter:
         if not name:
             return None
 
-        episodes = self._episodes(html, url, selectors, ctx)
+        tab_lines = self._lines_from_tabs(html, url, selectors)
+        if tab_lines:
+            episodes = [ep for line in tab_lines for ep in line.episodes]
+        else:
+            episodes = self._episodes(html, url, selectors, ctx)
         if not episodes:
             # The dominant real-world shape: the detail page's playlist does not link to media
             # at all, it links to one *play page per episode* (``/vodplay/12345-1-1.html``), and
@@ -248,7 +312,7 @@ class HtmlSsrAdapter:
             vid=self._vid_from_url(url, site.key),
             name=name,
             year=year,
-            lines=[Line(name="线路1", episodes=episodes)],
+            lines=tab_lines or [Line(name="线路1", episodes=episodes)],
             source_url=url,
         )
         vod.sid = compute_sid(site.key, vod.vid)

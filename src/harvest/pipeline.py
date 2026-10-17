@@ -41,6 +41,10 @@ class RunOptions:
     # Tier-4 episode ceiling is normally a recipe setting. A run-level override exists because a
     # smoke test and a nightly harvest want very different ceilings against the same recipe.
     max_episodes: int | None = None
+    #: Line-name filters. `keep` non-empty means "this line name must match"; `drop` always
+    #: applies. Regex, case-insensitive -- `--lines-keep 4K` is the common case.
+    line_keep: list[str] = field(default_factory=list)
+    line_drop: list[str] = field(default_factory=list)
     gateway_base: str = ""
     flavors: tuple[str, ...] = tvbox_mod.FLAVORS
     run_id: str = ""
@@ -430,6 +434,40 @@ async def run_pipeline(options: RunOptions, settings: Settings | None = None) ->
                     pairs.append((site, None))
                     save_recipe(site, settings)
                     continue
+
+                # --- line filter ---------------------------------------------------
+                # Applied before cleaning: dropping lines first means the dedupe/blacklist work
+                # only ever sees what will actually be published.
+                keep_patterns = list(options.line_keep) or list((site.lines or {}).get("keep") or [])
+                drop_patterns = list(options.line_drop) or list((site.lines or {}).get("drop") or [])
+                if keep_patterns or drop_patterns:
+                    from harvest.clean.lines import filter_lines
+
+                    line_result = filter_lines(data, keep=keep_patterns, drop=drop_patterns)
+                    if line_result.dropped_titles:
+                        site_report.filtered["line_not_matched"] = line_result.dropped_title_count
+                    if line_result.dropped_titles:
+                        site_report.notes.append(
+                            f"线路过滤 {keep_patterns or '-'} 命中 {line_result.kept_titles} 部，"
+                            f"因无可匹配线路丢弃 {line_result.dropped_title_count} 部"
+                        )
+                    ctx.stats["line_names"] = line_result.names
+                    ctx.stats["line_names_observed"] = line_result.observed
+                    if not data.vods:
+                        site_report.status = "failed"
+                        site_report.errors.append(
+                            {
+                                "where": "line-filter",
+                                "error": (
+                                    "no title has a line matching "
+                                    f"{keep_patterns or '-'}; observed lines: "
+                                    f"{', '.join(line_result.observed) or 'none'}"
+                                ),
+                            }
+                        )
+                        pairs.append((site, None))
+                        save_recipe(site, settings)
+                        continue
 
                 # --- clean ---------------------------------------------------------
                 page_html = ctx.page_html_sample or ""

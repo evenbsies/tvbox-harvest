@@ -318,6 +318,36 @@ python -m harvest.cli scorecard https://example.com/ --sample 60 --streams 5
 
 ---
 
+## 只保留 4K 线路
+
+同一个片子的详情页常挂着好几条**播放线路**——闪电、非凡、量子，有时其中一条直接就叫 `4K高清`。它们不是几个片子，是同一部片子的几条流。想要「只要 4K 那条」，先看清站上到底怎么给线路起名：
+
+```bash
+python -m harvest.cli lines https://example.com/ --sample 6 --match 4K
+```
+
+输出是「线路名 → 出现在几部」，加 `--match 4K` 会标出命中的那条。然后再采集：
+
+```bash
+python -m harvest.cli collect --site example --lines-keep 4K
+```
+
+也可以写进配方，跟着站点走：
+
+```yaml
+lines:
+  keep: ["4K", "2160"]   # 正则，大小写不敏感；空表示不过滤
+  drop: ["广告"]
+```
+
+**判定口径只有一条：线路名。** 名字来自源站（Tier 1 的 `vod_play_from`，其他层级是页面上的线路标签），也就是用户在播放器里看到的那几个字。
+
+- 片子标题写着「4K」不算——那是片名上的词，不是某条流的属性；`streams_measured_by_sps` 才是流的实测。
+- 线路没有名字的站点（例如有些模板只给线路编号）**不算匹配**。对这类站跑 `--lines-keep 4K` 会得到 0 部，这是正确结果：无法证明它是 4K，就不假装它是。
+- 一条都不剩的片子会被**整条丢弃**而不是留个空壳，并在报告里记 `line_not_matched`，附带站上实际出现过的线路名——短多少、为什么短，都在报告里。
+
+---
+
 ## 仓库结构
 
 ```

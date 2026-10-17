@@ -18,6 +18,21 @@ sites:
   origin:
     type: template
   last_run: {}
+- key: pianku
+  name: 片库
+  base_url: https://4k01.pianku.online
+  adapter: html_ssr
+  tier: 3
+  enabled: false
+  origin:
+    type: manual
+    note: Tier-3 validation; collection API returns `closed`, play lines are tab-labelled
+  last_run:
+    at: '2026-10-17T03:48:00+00:00'
+    status: ok
+    vods: 3
+    lines: 3
+    filtered: 0
 - key: zhuiying
   name: 追影
   base_url: https://zhuiying3.cc
@@ -26,7 +41,8 @@ sites:
   enabled: false
   origin:
     type: manual
-    note: Tier-4 validation with an anchor-based episode list; 1080p measured from SPS
+    note: Tier-4 validation with an anchor-based episode list; 1080p measured from
+      SPS
   last_run:
     at: '2026-10-17T03:19:00+00:00'
     status: degraded
