@@ -16,7 +16,7 @@
 key: validation-lziapi
 name: 采集接口验证站
 base_url: https://cj.lziapi.com
-adapter: maccms_v10
+adapter: auto
 enabled: true
 
 compliance:
@@ -43,7 +43,7 @@ maccms:
   # 44-entry class table, and passes the ?ac=detail shape check.
   api_path: /api.php/provide/vod/
   categories_all: true
-  max_pages: 20
+  max_pages: 40
   incremental_hours: 24
 
   page_limit: 20

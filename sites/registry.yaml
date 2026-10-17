@@ -33,3 +33,14 @@ sites:
     vods: 3
     lines: 3
     filtered: 0
+- key: validation-lziapi
+  name: validation-lziapi
+  base_url: https://cj.lziapi.com
+  adapter: auto
+  tier: 0
+  enabled: true
+  origin:
+    type: issue
+    issue: 2
+    at: '2026-10-17T02:11:28+00:00'
+  last_run: {}
