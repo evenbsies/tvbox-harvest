@@ -192,6 +192,56 @@ def load_published_entries(path: Path) -> dict[str, dict[str, Any]]:
     return entries
 
 
+def _gateway_for(site: SiteConfig, gateway_base: str) -> str:
+    """The gateway this site should be published against.
+
+    The `--gateway` flag / `HARVEST_GATEWAY` variable wins, but a recipe may name its own
+    gateway in `probe.gateway` -- and then it is self-contained. That matters more than it
+    looks: the gate below used to consider only `gateway_base`, so a nightly run with no
+    variable set dropped a fully configured Tier-4 site as `gateway_not_configured`, and
+    the published subscription silently lost a source that had been working. A repository
+    variable is invisible from the file that owns the site; a field in the recipe is not.
+    """
+    return gateway_base or str((site.probe or {}).get("gateway") or "")
+
+
+def _rebuild_carried(
+    key: str,
+    stored: dict[str, Any],
+    defaults: dict[str, Any],
+    *,
+    settings: Settings,
+    gateway_base: str,
+    flavor: str,
+    name_suffix: bool,
+) -> dict[str, Any] | None:
+    """Project a carried-over site from its recipe instead of copying the old entry.
+
+    Returns ``None`` when the site cannot be published in this flavour at all, which is the
+    honest answer for a bridged site in the direct config.
+    """
+    from harvest.pipeline import load_recipe  # local: pipeline imports this module
+
+    try:
+        site = load_recipe(key, settings)
+    except Exception:
+        site = None
+    if site is None:
+        return dict(stored)  # no recipe to consult: the stored entry is all that is known
+
+    gateway = "" if flavor == "direct" else _gateway_for(site, gateway_base)
+    entry = build_entry(site, None, defaults, gateway_base=gateway, use_gateway=bool(gateway))
+    if name_suffix:
+        template = str((defaults.get("name_suffix") or {}).get("template") or " [{tier}]")
+        entry["name"] = f"{entry.get('name', key)}{template.format(tier=f'T{site.tier()}')}"
+    if not entry.get("api"):
+        # A recipe that produces no address is one this flavour cannot publish. Falling back to
+        # the stored entry would put a bridged address into the direct config, which is exactly
+        # what the direct flavour promises not to do.
+        return None
+    return entry
+
+
 def generate_all(
     pairs: list[tuple[SiteConfig, SiteData | None]],
     *,
@@ -217,16 +267,7 @@ def generate_all(
     out: list[GeneratedConfig] = []
 
     def gateway_for(site: SiteConfig) -> str:
-        """The gateway this site should be published against.
-
-        The `--gateway` flag / `HARVEST_GATEWAY` variable wins, but a recipe may name its own
-        gateway in `probe.gateway` -- and then it is self-contained. That matters more than it
-        looks: the gate below used to consider only `gateway_base`, so a nightly run with no
-        variable set dropped a fully configured Tier-4 site as `gateway_not_configured`, and
-        the published subscription silently lost a source that had been working. A repository
-        variable is invisible from the file that owns the site; a field in the recipe is not.
-        """
-        return gateway_base or str((site.probe or {}).get("gateway") or "")
+        return _gateway_for(site, gateway_base)
 
     # Per-site files first: they are what a user subscribes to for a single source, and they
     # are the only artefacts that must exist for `verify` to test a site in isolation.
@@ -300,13 +341,26 @@ def generate_all(
         # Carry forward enabled sites this run has no data for. Read the previous file *before*
         # overwriting it, and only for keys the caller says should be published -- a site that
         # has since been disabled must disappear from the config, not live on in a stale entry.
+        #
+        # The carried entry is rebuilt from its recipe, not copied verbatim. A copy freezes every
+        # field the recipe owns: rename a site and the old name survives until the next time that
+        # site happens to be harvested; move the gateway and the entry keeps pointing at the old
+        # host. Rebuilding costs nothing (no request is made -- `data` is None) and keeps the
+        # recipe as the single source of truth, with the previous file contributing only the fact
+        # that the site is published at all.
         carried: list[str] = []
         if carry_over:
             existing = load_published_entries(path)
             for key in carry_over:
                 if key in keys or key not in existing:
                     continue
-                entries.append(existing[key])
+                rebuilt = _rebuild_carried(
+                    key, existing[key], defaults, settings=settings, gateway_base=gateway_base,
+                    flavor=flavor, name_suffix=name_suffix,
+                )
+                if rebuilt is None:
+                    continue
+                entries.append(rebuilt)
                 keys.append(key)
                 carried.append(key)
 

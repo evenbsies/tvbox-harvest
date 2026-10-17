@@ -467,3 +467,43 @@ def test_no_data_with_data_for_a_disabled_site_only_is_an_error(
         assert result.exit_code == 1, result.output
     finally:
         config.get_settings.cache_clear()
+
+
+def test_a_carried_entry_follows_the_recipe_not_the_old_copy(tmp_path: Path) -> None:
+    """Renaming a site must reach the subscription even if the site is not re-harvested.
+
+    Carrying the previous entry verbatim freezes everything the recipe owns. The concrete case:
+    a site was published as "采集接口验证站", the recipe was renamed, and the subscription kept the
+    old name -- for as long as that site happened to produce no data in a run. The same mechanism would
+    keep an entry pointing at a gateway host that has since moved.
+    """
+    import io
+
+    from ruamel.yaml import YAML
+
+    from harvest.pipeline import save_recipe
+
+    settings = _settings(tmp_path)
+    alpha = _site("alpha")
+    alpha.name = "旧名字"
+    save_recipe(alpha, settings)
+
+    generate_all([(alpha, _data("alpha"))], settings=settings, carry_over={"alpha"})
+    assert load_published_entries(settings.tvbox_dir / FLAVOR_FILES["direct"])["alpha"]["name"] == "旧名字"
+
+    # Rename the way a human does it -- in the file. `save_recipe` only writes back the keys the
+    # machine owns, so `name` never travels that path, which is the point of the design.
+    recipe = settings.sites_dir / "alpha.yaml"
+    yaml_rt = YAML()
+    yaml_rt.preserve_quotes = True
+    doc = yaml_rt.load(recipe.read_text(encoding="utf-8"))
+    doc["name"] = "新名字"
+    buf = io.StringIO()
+    yaml_rt.dump(doc, buf)
+    recipe.write_text(buf.getvalue(), encoding="utf-8")
+
+    # A run that harvests something else entirely: alpha is carried, not collected.
+    generate_all([(_site("beta"), _data("beta"))], settings=settings, carry_over={"alpha", "beta"})
+
+    entry = load_published_entries(settings.tvbox_dir / FLAVOR_FILES["direct"])["alpha"]
+    assert entry["name"] == "新名字"
