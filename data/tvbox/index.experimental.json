@@ -1,6 +1,21 @@
 {
   "sites": [
     {
+      "key": "dbzy",
+      "name": "豆瓣资源",
+      "type": 1,
+      "api": "https://dbzy.tv/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "ffzy",
       "name": "非凡影视",
       "type": 1,
@@ -31,6 +46,36 @@
       }
     },
     {
+      "key": "jinyingzy",
+      "name": "金鹰资源",
+      "type": 1,
+      "api": "https://jinyingzy.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "jszy",
+      "name": "极速资源",
+      "type": 1,
+      "api": "https://jszyapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "lxyy-4k60",
       "name": "洛雪TV·4k60帧",
       "type": 1,
@@ -38,6 +83,66 @@
       "searchable": 1,
       "quickSearch": 1,
       "filterable": 0,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "lzizy",
+      "name": "量子影视",
+      "type": 1,
+      "api": "https://lzizy.net/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "mtzy",
+      "name": "茅台资源",
+      "type": 1,
+      "api": "https://mtzy.me/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "p2100",
+      "name": "飘零资源",
+      "type": 1,
+      "api": "https://p2100.net/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "subozy",
+      "name": "速播资源",
+      "type": 1,
+      "api": "https://www.subozy.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
       "changeable": 1,
       "playerType": 2,
       "style": {
@@ -89,6 +194,21 @@
         "type": "rect",
         "ratio": 1.4
       }
+    },
+    {
+      "key": "zuida",
+      "name": "最大资源",
+      "type": 1,
+      "api": "https://zuida.xyz/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
     }
   ],
   "lives": [],
@@ -115,8 +235,8 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-final6",
-  "generated_at": "2026-10-17T12:05:00+00:00",
+  "version": "experimental-14sites",
+  "generated_at": "2026-10-17T12:46:35+00:00",
   "generated_by": "tvbox-harvest",
   "gateway": "https://tvbox.myeven.ccwu.cc"
 }
