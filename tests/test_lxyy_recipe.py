@@ -1,9 +1,10 @@
-"""The 洛雪TV single-source recipe: one `source`, one keyword list, no surprises.
+"""The 洛雪TV single-source recipe: one `source`, walked through the whole catalogue.
 
 The recipe exists to express a narrow intent -- "only the 4k60帧 source" -- on an interface that
-does not support browsing. These tests pin the two things that would silently break that intent:
-the source filter disappearing from the URL, and the keyword list being emptied (which the
-interface rejects with 「请输入关键词」).
+mixes eight sources into one list. These tests pin the three things that would silently break that
+intent: the source filter disappearing, the walk stopping at page one because the site's `total`
+is the page size, and the recipe drifting back to keyword search (which covered roughly 6% of the
+catalogue and made the source look nearly empty).
 """
 
 from __future__ import annotations
@@ -17,18 +18,28 @@ def _recipe():
 
 
 def test_the_recipe_pins_the_4k_source() -> None:
+    """The list is a mixed eight-source feed; the filter is what makes it a single-source recipe."""
     site = _recipe()
     assert site is not None
-    assert "source=mj" in str(site.fields["list_url"])
+    assert (site.fields.get("require") or {}).get("source") == "mj"
     assert "source=mj" in str(site.fields["detail_url"])
 
 
-def test_the_keyword_list_is_what_drives_the_harvest() -> None:
-    """`action=search` needs `wd`; there is no per-source browse endpoint to fall back on."""
+def test_the_walk_uses_the_whole_catalogue_form() -> None:
+    """`wd=%` is the site's "all rows" query. Anything else here means keyword search again."""
     site = _recipe()
     assert site is not None
-    keywords = (site.probe or {}).get("categories") or []
-    assert keywords, "no keyword means zero requests, which reads as an empty site"
+    assert "wd=%25" in str(site.fields["list_url"]), (
+        "the list URL stopped asking for the whole catalogue; keyword search only reaches the "
+        "titles someone happened to write down"
+    )
+    assert str(site.fields.get("page_stop") or "") == "empty", (
+        "the site reports no page count (its `total` is the page size), so the walk must run to "
+        "max_pages or the first empty page"
+    )
+    assert not (site.probe or {}).get("keyword_source"), (
+        "keyword discovery is the fallback for interfaces without a catalogue listing"
+    )
 
 
 def test_episodes_are_read_from_the_nested_detail_path() -> None:

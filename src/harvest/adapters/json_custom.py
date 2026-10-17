@@ -87,18 +87,28 @@ class JsonCustomAdapter:
             ctx.stats["keywords_total"] = len(categories)
         max_pages = int(fields.get("max_pages") or site.maccms.max_pages)
         raw_items: list[dict[str, Any]] = []
+        require = dict(fields.get("require") or {})
+
+        def keep(row: Any) -> bool:
+            if not require or not isinstance(row, dict):
+                return True
+            return all(str(row.get(k) or "") == str(v) for k, v in require.items())
 
         for cid in categories or [""]:
             page, pagecount = 1, 1
             while page <= min(pagecount, max_pages):
+                # The budget counts rows this site will actually become, not rows returned. A
+                # shared catalogue can list eight sources per page, and counting raw rows ended
+                # the walk after two pages -- fewer titles than the budget allowed, for a reason
+                # nothing in the run output explained.
                 if ctx.expired or (ctx.max_titles and len(raw_items) >= ctx.max_titles):
                     break
                 url = self._render(list_url, site, {"cat": cid, "page": page, "type": cid})
                 items, payload = await self._fetch(url, site, ctx, fields)
                 if not items:
                     break
-                raw_items.extend(items)
-                pagecount = self._pagecount(payload, fields)
+                raw_items.extend([row for row in items if keep(row)])
+                pagecount = self._pagecount(payload, fields, max_pages)
                 if page >= pagecount:
                     break
                 page += 1
@@ -188,6 +198,18 @@ class JsonCustomAdapter:
         if payload is None:
             return [], None
 
+        if isinstance(payload, dict) and payload.get("need_captcha"):
+            # The site turns on a captcha when it wants fewer requests. It is a rate limit, not a
+            # puzzle to be automated: solving it would be working around the operator's stated
+            # limit. Record it and stop this branch -- a truncated-but-honest run beats one that
+            # quietly returns half a catalogue because every page after the first was challenged.
+            ctx.note_error(
+                "json_custom:ratelimit",
+                f"captcha challenge after {ctx.stats.get('requests', '?')} requests; "
+                f"lower request.rate_limit or max_pages: {url}",
+            )
+            return [], None
+
         ctx.stats["last_payload_keys"] = sorted(payload.keys())[:25] if isinstance(payload, dict) else []
 
         items = jp_get(payload, str(fields.get("list_path") or ""))
@@ -205,7 +227,15 @@ class JsonCustomAdapter:
         out = [item for item in items if isinstance(item, dict)]
         return out, payload
 
-    def _pagecount(self, payload: Any, fields: dict[str, Any]) -> int:
+    def _pagecount(self, payload: Any, fields: dict[str, Any], max_pages: int = 1) -> int:
+        """How many pages this payload says exist.
+
+        `page_stop: empty` is for interfaces that carry no page count at all -- the payload's
+        `total` is the size of *this page*, so trusting it ends the walk after page one. Those
+        are walked to `max_pages` (or the first empty page, which the caller already handles).
+        """
+        if str(fields.get("page_stop") or "").strip() == "empty":
+            return max(1, max_pages)
         path = str(fields.get("pagecount_path") or "")
         if not path:
             return 1
@@ -219,9 +249,21 @@ class JsonCustomAdapter:
         self, site: SiteConfig, items: list[dict[str, Any]], fields: dict[str, Any], ctx: CollectContext
     ) -> list[Vod]:
         vods: list[Vod] = []
-        for index, item in enumerate(items):
-            if ctx.max_titles and index >= ctx.max_titles:
+        require = fields.get("require") or {}
+        dropped = 0
+        for item in items:
+            if ctx.max_titles and len(vods) >= ctx.max_titles:
                 break
+            # `require` keeps only rows whose declared fields match exactly. It exists because a
+            # site can expose one shared catalogue for several sources and still list a row per
+            # source: 160 rows a page where only 20 are the source being harvested. Without a
+            # filter those 140 unrelated rows consume the title budget and the detail requests.
+            if require and any(
+                str(item.get(key) or "") != str(value)
+                for key, value in dict(require).items()
+            ):
+                dropped += 1
+                continue
             vid = jp_str(item, str(fields.get("id") or "$.id"))
             name = jp_str(item, str(fields.get("name") or "$.name"))
             if not vid or not name:
@@ -266,6 +308,8 @@ class JsonCustomAdapter:
                     updated_at=field("updated_at") or None,
                 )
             )
+        if dropped:
+            ctx.stats["require_dropped"] = dropped
         return vods
 
     async def _episode_lines_from_detail(

@@ -182,3 +182,86 @@ class TestDetailBackfill:
         vod = data.vods[0]
         assert vod.pic == "https://img.test/poster.jpg"
         assert vod.lines and vod.lines[0].episodes[0].url == "https://cdn.test/1.m3u8"
+
+
+class TestBrowseWholeCatalogue:
+    """Walking a paginated catalogue that mixes several sources into one list.
+
+    The real site behind these tests (tv.lxyy.club) answers `action=search&wd=%` with the whole
+    catalogue -- 160 rows, 20 per source -- and only 20 of them are the source being harvested.
+    Two failures came out of that shape, both silent: the walk stopped because the payload's
+    `total` is the page size, and the budget counted rows returned rather than rows kept.
+    """
+
+    def _site(self, *, max_pages: int = 4) -> SiteConfig:
+        return SiteConfig(
+            key="t2",
+            name="示例",
+            base_url="https://demo.test",
+            adapter="json_custom",
+            probe={},
+            fields={
+                "list_url": "{base_url}/list?page={page}",
+                "list_path": "$.results[*]",
+                "page_stop": "empty",
+                "max_pages": max_pages,
+                "require": {"source": "mj"},
+                "id": "$.id",
+                "name": "$.name",
+            },
+        )
+
+    @staticmethod
+    def _page(page: int) -> dict:
+        rows = [
+            {"source": "qilin", "id": f"q{page}{i}", "name": f"其他 {page}-{i}"} for i in range(8)
+        ] + [{"source": "mj", "id": f"m{page}{i}", "name": f"目标 {page}-{i}"} for i in range(2)]
+        return {"results": rows, "total": len(rows)}  # `total` is the page size, not the count
+
+    def test_walks_past_the_first_page_when_the_site_reports_no_page_count(self) -> None:
+        pages = {f"page={n}": self._page(n) for n in range(1, 5)}
+        http = FakeHttp(pages)
+        ctx = make_ctx(http)
+        ctx.max_titles = 6
+        site = self._site(max_pages=4)
+
+        result = __import__("asyncio").run(JsonCustomAdapter().collect(site, ctx))
+
+        assert [v.vid for v in result.vods] == ["m10", "m11", "m20", "m21", "m30", "m31"]
+        pages_fetched = [u for u in http.calls if "/list?page=" in u]
+        assert len(pages_fetched) >= 3, (
+            f"the walk stopped after {len(pages_fetched)} page(s); `total` is the page size, "
+            "so a page count taken from it ends the walk at page 1"
+        )
+
+    def test_budget_counts_kept_rows_not_rows_returned(self) -> None:
+        pages = {f"page={n}": self._page(n) for n in range(1, 5)}
+        http = FakeHttp(pages)
+        ctx = make_ctx(http)
+        ctx.max_titles = 3
+        site = self._site(max_pages=4)
+
+        result = __import__("asyncio").run(JsonCustomAdapter().collect(site, ctx))
+
+        # Eight rows a page are the wrong source; a budget that counted those would stop at page 1.
+        assert len(result.vods) == 3
+        assert [v.vid for v in result.vods] == ["m10", "m11", "m20"]
+
+    def test_a_captcha_challenge_is_an_error_not_an_empty_catalogue(self) -> None:
+        http = FakeHttp(
+            {
+                "page=1": self._page(1),
+                "page=2": {"success": False, "need_captcha": True, "results": []},
+            }
+        )
+        site = self._site(max_pages=4)
+        ctx = make_ctx(http)
+        ctx.max_titles = 10
+
+        result = __import__("asyncio").run(JsonCustomAdapter().collect(site, ctx))
+
+        assert len(result.vods) == 2, "the first page should still be published"
+        assert any(e["where"] == "json_custom:ratelimit" for e in ctx.errors), (
+            "a rate-limit challenge must be reported: otherwise the run looks like a short "
+            "catalogue rather than a truncated one"
+        )
