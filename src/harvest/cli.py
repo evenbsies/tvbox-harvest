@@ -693,9 +693,46 @@ def purge_cdn(
         console.print(f"[{color}]purge {status}[/{color}] {target}")
 
 
+def _published_keys(settings: Any) -> set[str] | None:
+    """Site keys named by the generated configs, or None if none of them could be read.
+
+    Reading the configs -- rather than the registry -- answers "what is in the product right
+    now", which is the question that matters when deciding whether an artefact is stale. A site
+    that is enabled but harvested nothing this run is still named, because carry-over kept its
+    entry; a site that has been switched off is named nowhere.
+    """
+    keys: set[str] = set()
+    readable = 0
+    for name in tvbox_mod.produced_index_files():
+        path = settings.tvbox_dir / name
+        try:
+            config = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        readable += 1
+        for entry in config.get("sites") or []:
+            if isinstance(entry, dict) and entry.get("key"):
+                keys.add(str(entry["key"]))
+    return keys if readable else None
+
+
 @app.command()
-def prune(keep: int = typer.Option(7, "--keep")) -> None:
-    """Trim the raw archive so the repository does not grow without bound."""
+def prune(
+    keep: int = typer.Option(7, "--keep"),
+    stale: bool = typer.Option(
+        True,
+        "--stale/--no-stale",
+        help="Drop per-site artefacts for sites the generated configs no longer name",
+    ),
+) -> None:
+    """Trim the raw archive, and drop artefacts belonging to sites that are no longer published.
+
+    The second job is not housekeeping, it is the removal path. `data/tvbox/sites/<key>.json` is a
+    *subscription URL in its own right*: someone can point TVBox at one site's file. Nothing ever
+    deleted those, so a site switched off (or renamed) kept serving its last contents from that
+    URL forever, while COMPLIANCE.md promises the site vanishes from every artefact. Snapshots
+    are dropped for the same reason -- they are the audit copy of what was harvested.
+    """
     settings = get_settings()
     removed = 0
     for site_dir in sorted(settings.raw_dir.glob("*")):
@@ -706,6 +743,36 @@ def prune(keep: int = typer.Option(7, "--keep")) -> None:
             old.unlink()
             removed += 1
     console.print(f"pruned {removed} raw files (kept {keep} per site)")
+
+    if not stale:
+        return
+
+    published = _published_keys(settings)
+    if published is None:
+        # No config was generated (a dry run, or a run that produced nothing). Deleting on the
+        # strength of an unreadable config would be the worst possible guess.
+        console.print("[yellow]no generated config found; skipping stale artefact pruning[/yellow]")
+        return
+
+    dropped_sites: list[str] = []
+    for path in sorted((settings.tvbox_dir / "sites").glob("*.json")):
+        if path.stem not in published:
+            path.unlink()
+            dropped_sites.append(path.stem)
+
+    dropped_snaps: list[str] = []
+    for site_dir in sorted(settings.snapshot_dir.glob("*")):
+        if site_dir.is_dir() and site_dir.name not in published:
+            shutil.rmtree(site_dir)
+            dropped_snaps.append(site_dir.name)
+
+    if dropped_sites or dropped_snaps:
+        console.print(
+            f"[yellow]dropped stale artefacts for {len(set(dropped_sites) | set(dropped_snaps))} "
+            f"site(s): {', '.join(sorted(set(dropped_sites) | set(dropped_snaps)))}[/yellow]"
+        )
+    else:
+        console.print("no stale per-site artefacts")
 
 
 @app.command()

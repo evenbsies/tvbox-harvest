@@ -117,7 +117,9 @@ python -m harvest.cli collect --site <key>
 
 1. 把 `sites/<key>.yaml` 与 `sites/registry.yaml` 中该站点置为 `enabled: false`
 2. 把域名加入 `config/blacklist/` 的站点级黑名单
-3. 下一次生成时该站点从所有订阅产物中消失
+3. 下一次生成时该站点从所有订阅产物中消失：`generate` 不再把它写进 `index*.json`，`prune` 会删掉 `data/tvbox/sites/<key>.json`（它本身就是一个可被直接订阅的地址）与 `data/snapshot/<key>/`（采集审计副本）
+
+第 3 步里的 per-site 文件值得单独说明：它在项目早期没有任何清理逻辑，停用站点后仍会长期对外提供最后一版内容——也就是说「移除」在事实上不成立过一段时间。现在由 `harvest prune --stale`（工作流里的默认步骤）负责。
 
 **方式二：Fork 后自行删除**
 
