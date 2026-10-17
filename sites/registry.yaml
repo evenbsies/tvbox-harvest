@@ -18,6 +18,21 @@ sites:
   origin:
     type: template
   last_run: {}
+- key: lxyy-4k60
+  name: 洛雪TV·4k60帧
+  base_url: https://tv.lxyy.club
+  adapter: json_custom
+  tier: 2
+  enabled: false
+  origin:
+    type: manual
+    note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
+  last_run:
+    at: '2026-10-17T04:35:00+00:00'
+    status: ok
+    vods: 2
+    lines: 2
+    filtered: 1
 - key: pianku
   name: 片库
   base_url: https://4k01.pianku.online

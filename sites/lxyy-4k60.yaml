@@ -1,0 +1,85 @@
+# 洛雪TV 的「4k60帧🔥」采集源（source=mj）。
+#
+# 为什么要单独成一个站：洛雪TV 把 8 个采集源聚合成一个界面，其中「4k60帧🔥」是本列表中唯一
+# 明确标 4K 的源。要「只爬 4K」，就得只取这个 source，而不是把 8 个源一起收。
+#
+# 实测到的事实（2026-10-17）：
+#
+#   * 目录只能**按关键词**取。`action=home` 固定返回 `home_source: qilin` 的数据，传
+#     `source=mj` 也无效；`action=search&wd=<词>&source=mj` 才是唯一能列出该源条目的入口，
+#     `wd` 为空会返回「请输入关键词」。没有任何「按源浏览全部」的接口。
+#     所以这里的 categories 是**关键词列表**，不是分类——这是对方接口的限制，不是取舍。
+#   * 详情 `action=detail&source=mj&id=<id>` 直接给 `.m3u8`（mujizybf08.com），
+#     **不需要解析器**。`player_api` 字段虽然存在（母鸡播放器），但片源地址是现成的。
+#   * 上游 `mujizybf08.com` 只做 CDN（前台未开启、无 /api.php）；`mujizybf.com` 是播放器。
+#     两者都不能作为独立采集源，所以走洛雪TV 的聚合接口是唯一路径。
+#
+# COMPLIANCE：目录经第三方聚合接口读取，媒体地址直连上游 CDN（不经过洛雪TV）。
+# 依赖对方接口的可用性；默认停用，启用前请自行确认合法性与对方条款。
+
+key: lxyy-4k60
+name: 洛雪TV·4k60帧
+base_url: https://tv.lxyy.club
+adapter: json_custom
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    目录经 tv.lxyy.club 的公开聚合接口读取；返回的播放地址直连上游 CDN，本项目不转存、不代播。
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0
+      Safari/537.36"
+    Referer: "https://tv.lxyy.club/"
+    Accept-Language: "zh-CN,zh;q=0.9"
+  rate_limit: 1.0
+  timeout: 25
+  retries: 2
+  respect_robots: true
+
+fields:
+  # {cat} 在这里是**关键词**（见文件头），{page} 是页码。
+  list_url: "{base_url}/api/proxy.php?action=search&wd={cat}&page={page}&source=mj"
+  list_path: "$.results[*]"
+  id: "$.id"
+  name: "$.name"
+  category: "$.type"
+  remarks: "$.remarks"
+  year: "$.year"
+  detail_url: "{base_url}/api/proxy.php?action=detail&source=mj&id={id}"
+  # 详情里是两层：details[0].episodes[*] 是线路分组，里面才是剧集。
+  episodes_path: "$.details[0].episodes[*].episodes[*]"
+  episode_name: "$.name"
+  episode_url: "$.url"
+  max_pages: 1
+
+probe:
+  # 关键词即「要抓什么」。按需增删；每多一个词就是一次列表 + N 次详情请求。
+  categories:
+    - 庆余年
+    - 繁花
+budget:
+  max_titles_per_run: 40
+  max_requests_per_site: 200
+
+tvbox:
+  # 自定义 JSON 接口 TVBox 读不懂，必须经网关转写成 MacCMS 形状（与 T2 的其它站一致）。
+  type: 1
+  searchable: 1
+  quickSearch: 1
+  filterable: 0
+detect:
+  version: 1
+  stale: false
+  evidence: {}
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  page_limit: 20
+  max_pages: 40
+  incremental_hours: 24
+browser: {}
+selectors: {}
