@@ -43,10 +43,23 @@ const MAX_PAGE_SIZE = 100;
  */
 const cache = new Map(); // `${base}|${path}` -> { at, data }
 
+/**
+ * Where the snapshots live.
+ *
+ * Default is raw.githubusercontent.com, for the same reason `configBase` defaults there: a
+ * jsDelivr *branch* ref is resolved to a commit and cached per edge for up to 12 hours, and the
+ * edges disagree. Measured right after a 514-title re-harvest: `cdn` still served the previous
+ * 16-title manifest while `fastly`, `gcore` and `testingcf` served the new one -- and a purge
+ * did not fix `cdn`. The gateway is the one consumer that must agree with what was just
+ * committed, so it does not go through that cache.
+ *
+ * `SNAPSHOT_BASE` is still honoured first: that is what lets the local mirror and any
+ * self-hosted storage drive the whole thing.
+ */
 function snapshotBase(env) {
   if (env.SNAPSHOT_BASE) return env.SNAPSHOT_BASE.replace(/\/+$/, "");
   if (!env.REPO) throw new Error("REPO binding is required");
-  return `https://cdn.jsdelivr.net/gh/${env.REPO}@main/data/snapshot`;
+  return `https://raw.githubusercontent.com/${env.REPO}/main/data/snapshot`;
 }
 
 /**

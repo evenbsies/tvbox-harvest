@@ -242,8 +242,9 @@ routes = [
 
 ### 2. 客户端侧不要用 `cdn.jsdelivr.net`
 
-网关自己读 `SNAPSHOT_BASE` 是从 Cloudflare 边缘发起的，走 `cdn.jsdelivr.net` 没问题。但**订阅
-配置文件本身是播放设备去拉的**，那一步得用可达的边缘域名：
+网关自己读快照与配置都是从 Cloudflare 边缘发起的，不受这条限制；它们默认走
+`raw.githubusercontent.com`，原因见下一条。但**订阅配置文件本身是播放设备去拉的**，
+如果用 jsDelivr，那一步得挑可达的边缘域名：
 
 | 域名 | 直连结果 |
 |---|---|
@@ -254,6 +255,16 @@ routes = [
 
 同一个 jsDelivr，换边缘域名而已。**部署完必须用播放的那台设备实测一次订阅地址**，不要用构建机
 的结果代替。
+
+### 3. 网关自己不要走 jsDelivr 的分支缓存
+
+一次 514 部重采之后的实测：`cdn.jsdelivr.net` 还在返回上一版（16 部）的 manifest，
+而 `fastly` / `gcore` / `testingcf` 已经是新的，`purge` 也没能修好 `cdn`。
+jsDelivr 把分支引用解析成 commit 之后按边缘缓存最长 12 小时，各边缘的解析时刻不同，
+所以在「刚提交完」这个窗口里，它给出的东西是不可预期的——而网关恰恰是那个必须和
+最近一次提交一致的使用者。因此 `snapshotBase` 与 `configBase` 的默认值都是
+`raw.githubusercontent.com`（没有分支解析缓存，push 后分钟级可见），
+`SNAPSHOT_BASE` / `CONFIG_BASE` 仍然优先，本地镜像和自建存储照旧可用。
 
 ---
 
