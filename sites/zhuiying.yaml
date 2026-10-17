@@ -124,4 +124,14 @@ maccms:
   max_pages: 40
   incremental_hours: 24
 selectors: {}
-probe: {}
+probe:
+  # The deployed edge gateway. Written here rather than left to the `HARVEST_GATEWAY` Actions
+  # variable because of what happens *without* it: the adapters build `api` from this field, so
+  # a nightly run that collects this site with no gateway configured produces `api: ""`, the
+  # gateway flavour drops the entry as `no_api`, and a working source disappears from the
+  # published subscription with no error anywhere. A repo variable is easier to forget than a
+  # file the recipe already owns; `harvest generate --gateway` still overrides it when passed.
+  #
+  # This host is a subdomain of a zone on Cloudflare. A `*.workers.dev` address would be dead
+  # here -- see gateway/README.md, first hard constraint.
+  gateway: "https://tvbox.myeven.ccwu.cc"

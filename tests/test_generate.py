@@ -136,6 +136,38 @@ class TestGenerateAll:
         assert generated[0].site_count == 0
         assert generated[0].skipped[0]["reason"] == "gateway_not_configured"
 
+    def test_recipe_declared_gateway_publishes_without_the_flag(self, tmp_path):
+        """A site that names its gateway is self-contained.
+
+        Regression: the gate only looked at `gateway_base`, so a nightly run with no
+        `HARVEST_GATEWAY` variable dropped an otherwise complete Tier-4 entry as
+        `gateway_not_configured`. The entry then vanished from a subscription that had been
+        working, and nothing in the run reported it as an error.
+        """
+        from harvest.config import Settings
+
+        settings = Settings(root=tmp_path)
+        settings.ensure_dirs()
+        site = demo_site("playwright_sniff", "t4")
+        site.probe["gateway"] = "https://gw.example"
+        generated = tvbox_mod.generate_all(
+            [(site, demo_data(site))], settings=settings, flavors=("gateway",)
+        )
+        assert generated[0].site_keys == ["t4"]
+        entry = json.loads((settings.tvbox_dir / "index.gateway.json").read_text("utf-8"))["sites"][0]
+        assert entry["api"] == "https://gw.example/vod/t4"
+
+    def test_direct_flavour_does_not_advertise_a_gateway(self, tmp_path):
+        """The direct config must not name a route none of its entries take."""
+        from harvest.config import Settings
+
+        settings = Settings(root=tmp_path)
+        settings.ensure_dirs()
+        site = demo_site("maccms_v10", "t1")
+        tvbox_mod.generate_all([(site, demo_data(site))], settings=settings, flavors=("direct",))
+        config = json.loads((settings.tvbox_dir / "index.direct.json").read_text("utf-8"))
+        assert "gateway" not in config
+
     def test_experimental_flavour_includes_everything(self, tmp_path):
         from harvest.config import Settings
 

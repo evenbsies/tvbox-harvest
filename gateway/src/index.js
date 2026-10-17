@@ -215,6 +215,23 @@ async function handleVod(url, env, key) {
   return json(pageEnvelope({ items: filtered, pg, limit, classes: pg === 1 ? classes : undefined }));
 }
 
+/**
+ * Serve the generated TVBox config itself, so the subscription URL can be the gateway.
+ *
+ * Why this exists: the config also lives on jsDelivr, but a *branch* ref there is cached per
+ * edge for up to 12 hours, and the edges disagree for minutes after a purge. Measured right
+ * after a push: `cdn` and `testingcf` served the new file while `fastly` and `gcore` still
+ * served the previous one. A subscriber pointed at a stale edge sees a source list that
+ * silently lost its last harvest -- the exact failure this file's cache policy exists to avoid.
+ * Serving it here bounds staleness to CACHE_TTL (10 minutes by default) and puts the config and
+ * the data on one origin, which is also one fewer reachability question to answer.
+ */
+async function handleConfig(env, file) {
+  if (!env.REPO) return json({ error: "REPO binding is not set" }, 500);
+  const ttl = Number(env.CACHE_TTL || DEFAULT_TTL);
+  return json(await fetchJson(`${configBase(env)}/${file}`, ttl));
+}
+
 async function handleIndex(env) {
   if (!env.REPO) return json({ error: "REPO binding is not set" }, 500);
   const base = snapshotBase(env);
@@ -323,6 +340,13 @@ export default {
         return json({ ok: true, snapshot_base: snapshotBase(env), ttl: Number(env.CACHE_TTL || DEFAULT_TTL) });
       }
       if (path === "/") return await handleIndex(env);
+
+      // Whitelisted rather than a generic passthrough: the Worker is a projection of a known set
+      // of files, and an open proxy under a subscription URL is a different product.
+      const cfg = path.match(
+        /^\/tvbox\/(index(?:\.(?:direct|gateway|experimental))?|sites\/[A-Za-z0-9][A-Za-z0-9_.-]{0,63})\.json$/,
+      );
+      if (cfg) return await handleConfig(env, `${cfg[1]}.json`);
 
       if (path === "/admin/refresh") {
         if (request.method !== "POST") return json({ ok: false, error: "POST required" }, 405);

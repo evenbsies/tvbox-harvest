@@ -28,9 +28,25 @@ GitHub Actions 是**批处理**，TVBox 是**运行时**。对 Tier 1/2 站这�
 | `GET /vod/{key}?ac=class` | 分类表 |
 | `GET /vod/{key}?ac=list&pg=1&t=<分类>|&wd=<关键词>|&limit=20` | 列表 / 搜索（首页带分类表，与 MacCMS 一致） |
 | `GET /vod/{key}?ac=detail&ids=<sid,sid>` | 详情，含 `vod_play_from` / `vod_play_url` |
+| `GET /tvbox/index.json` | **订阅配置本身**（另有 `index.gateway.json` / `index.experimental.json`） |
+| `GET /tvbox/sites/{key}.json` | 单站订阅配置 |
 | `GET /` | 自查页：列出所有站点、片量、快照生成时间 |
 | `GET /health` | 存活与当前快照基址 |
 | `POST /admin/refresh` | HMAC 签名，触发仓库的 `repository_dispatch` 重新采集 |
+
+订阅地址可以**就是网关自己**：
+
+```
+https://<your-worker>/tvbox/index.gateway.json
+```
+
+为什么不直接用 jsDelivr：它的**分支引用**在每个边缘可缓存 12 小时，而且 purge 之后各边缘还会分歧
+几分钟（实测：push 完 `cdn` 与 `testingcf` 已是新版本，`fastly` 与 `gcore` 还是旧的）。订阅者正好
+落在旧边缘上，看到的就是一个悄悄丢了最近一次采集的源列表。走网关，陈旧窗口被压到 `CACHE_TTL`
+（默认 10 分钟），而配置和数据在同一个 origin 上——顺带少了「这个域名通不通」一个变量。
+
+配置类路由是**白名单**，不是通用透传：这个 Worker 是若干已知文件的投影，订阅地址下面挂一个开放
+代理是另一回事。
 
 订阅地址形如：
 

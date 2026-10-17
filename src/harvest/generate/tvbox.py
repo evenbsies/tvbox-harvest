@@ -216,14 +216,27 @@ def generate_all(
     tvbox_dir = settings.tvbox_dir
     out: list[GeneratedConfig] = []
 
+    def gateway_for(site: SiteConfig) -> str:
+        """The gateway this site should be published against.
+
+        The `--gateway` flag / `HARVEST_GATEWAY` variable wins, but a recipe may name its own
+        gateway in `probe.gateway` -- and then it is self-contained. That matters more than it
+        looks: the gate below used to consider only `gateway_base`, so a nightly run with no
+        variable set dropped a fully configured Tier-4 site as `gateway_not_configured`, and
+        the published subscription silently lost a source that had been working. A repository
+        variable is invisible from the file that owns the site; a field in the recipe is not.
+        """
+        return gateway_base or str((site.probe or {}).get("gateway") or "")
+
     # Per-site files first: they are what a user subscribes to for a single source, and they
     # are the only artefacts that must exist for `verify` to test a site in isolation.
     for site, data in pairs:
+        site_gateway = gateway_for(site)
         entry = build_entry(
-            site, data, defaults, gateway_base=gateway_base, use_gateway=bool(gateway_base)
+            site, data, defaults, gateway_base=site_gateway, use_gateway=bool(site_gateway)
         )
         single = build_config(
-            entries=[entry], defaults=defaults, run_id=run_id, gateway_base=gateway_base,
+            entries=[entry], defaults=defaults, run_id=run_id, gateway_base=site_gateway,
             flavor="site",
             # Deliberately empty: a single-site subscription must not drag in parse routes that
             # belong to a different site. Those live in the full configs below.
@@ -247,18 +260,22 @@ def generate_all(
                     skipped.append({"key": site.key, "reason": "no_api"})
                     continue
             elif flavor == "gateway":
-                if tier >= 3 and not gateway_base:
+                site_gateway = gateway_for(site)
+                if tier >= 3 and not site_gateway:
                     skipped.append({"key": site.key, "reason": "gateway_not_configured"})
                     continue
                 entry = build_entry(
-                    site, data, defaults, gateway_base=gateway_base, use_gateway=bool(gateway_base)
+                    site, data, defaults, gateway_base=site_gateway,
+                    use_gateway=bool(site_gateway),
                 )
                 if not entry.get("api"):
                     skipped.append({"key": site.key, "reason": "no_api"})
                     continue
             else:  # experimental
+                site_gateway = gateway_for(site)
                 entry = build_entry(
-                    site, data, defaults, gateway_base=gateway_base, use_gateway=bool(gateway_base)
+                    site, data, defaults, gateway_base=site_gateway,
+                    use_gateway=bool(site_gateway),
                 )
                 if name_suffix:
                     entry["name"] = f"{entry.get('name', site.key)} *exp"
@@ -286,8 +303,19 @@ def generate_all(
         entries.sort(key=lambda item: str(item.get("key") or ""))
         keys = [str(item.get("key") or "") for item in entries]
 
+        # The config-level `gateway` is informational, but leaving it empty while entries point
+        # at a gateway makes a generated file look broken to whoever reads it next. The direct
+        # flavour is the exception: no entry in it can use a gateway, so advertising one there
+        # would describe a route the file does not take.
+        config_gateway = "" if flavor == "direct" else (
+            gateway_base or next(
+                (str((s.probe or {}).get("gateway") or "") for s, _ in pairs
+                 if (s.probe or {}).get("gateway")),
+                "",
+            )
+        )
         config = build_config(
-            entries=entries, defaults=defaults, run_id=run_id, gateway_base=gateway_base,
+            entries=entries, defaults=defaults, run_id=run_id, gateway_base=config_gateway,
             flavor=flavor,
             parses=parses,
         )
