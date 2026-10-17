@@ -265,3 +265,186 @@ class TestBrowseWholeCatalogue:
             "a rate-limit challenge must be reported: otherwise the run looks like a short "
             "catalogue rather than a truncated one"
         )
+
+
+class TestDetailConcurrency:
+    """Detail requests dominate a catalogue walk, so they may run in parallel -- per recipe."""
+
+    class SlowHttp(FakeHttp):
+        def __init__(self, routes, delay: float = 0.02) -> None:
+            super().__init__(routes)
+            self.delay = delay
+            self.inflight = 0
+            self.peak = 0
+
+        async def get(self, url: str, **kwargs) -> FakeResponse:
+            self.inflight += 1
+            self.peak = max(self.peak, self.inflight)
+            try:
+                await __import__("asyncio").sleep(self.delay)
+                return await super().get(url, **kwargs)
+            finally:
+                self.inflight -= 1
+
+    def _site(self, concurrency: int) -> SiteConfig:
+        return SiteConfig(
+            key="t2",
+            name="示例",
+            base_url="https://demo.test",
+            adapter="json_custom",
+            probe={},
+            fields={
+                "list_url": "{base_url}/list?page={page}",
+                "list_path": "$.results[*]",
+                "id": "$.id",
+                "name": "$.name",
+                "detail_url": "{base_url}/detail?id={id}",
+                "episodes_path": "$.details[0].episodes[*].episodes[*]",
+                "episode_name": "$.name",
+                "episode_url": "$.url",
+                "max_pages": 1,
+                "concurrency": concurrency,
+            },
+        )
+
+    @staticmethod
+    def _routes() -> dict:
+        rows = [{"id": str(i), "name": f"片{i}"} for i in range(8)]
+        detail = {
+            "details": [
+                {"episodes": [{"episodes": [{"name": "第01集", "url": "https://cdn/1.m3u8"}]}]}
+            ]
+        }
+        return {"page=1": {"results": rows}, "/detail": detail}
+
+    def test_concurrency_runs_details_in_parallel(self) -> None:
+        http = self.SlowHttp(self._routes())
+        data = __import__("asyncio").run(
+            JsonCustomAdapter().collect(self._site(4), make_ctx(http))
+        )
+        assert len(data.vods) == 8
+        assert http.peak > 1, "the details were fetched one at a time"
+        assert http.peak <= 4, "more requests were in flight than the recipe allows"
+
+    def test_default_is_sequential(self) -> None:
+        """A recipe that says nothing gets the polite default: one request at a time."""
+        http = self.SlowHttp(self._routes())
+        data = __import__("asyncio").run(
+            JsonCustomAdapter().collect(self._site(1), make_ctx(http))
+        )
+        assert len(data.vods) == 8
+        assert http.peak == 1
+
+
+class TestPageGap:
+    """Listing is the expensive query server-side; details tolerate far more concurrency."""
+
+    def _site(self, gap: float) -> SiteConfig:
+        return SiteConfig(
+            key="t2",
+            name="示例",
+            base_url="https://demo.test",
+            adapter="json_custom",
+            probe={},
+            fields={
+                "list_url": "{base_url}/list?page={page}",
+                "list_path": "$.results[*]",
+                "id": "$.id",
+                "name": "$.name",
+                "page_stop": "empty",
+                "max_pages": 3,
+                "page_gap": gap,
+            },
+        )
+
+    def test_gap_is_observed_between_pages_but_not_before_the_first(self) -> None:
+        import asyncio
+        import time
+
+        routes = {f"page={n}": {"results": [{"id": str(n), "name": f"片{n}"}]} for n in (1, 2, 3)}
+        http = FakeHttp(routes)
+        start = time.monotonic()
+        data = asyncio.run(JsonCustomAdapter().collect(self._site(0.05), make_ctx(http)))
+        elapsed = time.monotonic() - start
+
+        assert len(data.vods) == 3
+        # Two gaps for three pages: the first request is not delayed.
+        assert elapsed >= 0.09, f"page_gap was ignored (elapsed {elapsed:.2f}s)"
+
+    def test_no_gap_means_no_extra_delay(self) -> None:
+        import asyncio
+        import time
+
+        routes = {f"page={n}": {"results": [{"id": str(n), "name": f"片{n}"}]} for n in (1, 2, 3)}
+        http = FakeHttp(routes)
+        start = time.monotonic()
+        asyncio.run(JsonCustomAdapter().collect(self._site(0), make_ctx(http)))
+        assert time.monotonic() - start < 0.05
+
+
+class TestCaptchaPause:
+    """A captcha is a "slow down" signal; waiting complies, solving does not."""
+
+    class OnceChallenged(FakeHttp):
+        """Challenges the first detail request, then behaves."""
+
+        def __init__(self, routes) -> None:
+            super().__init__(routes)
+            self.challenged = False
+
+        async def get(self, url: str, **kwargs) -> FakeResponse:
+            if "/detail" in url and not self.challenged:
+                self.challenged = True
+                self.calls.append(url)
+                return FakeResponse({"success": False, "need_captcha": True, "details": []})
+            return await super().get(url, **kwargs)
+
+    def _site(self, retries: int) -> SiteConfig:
+        return SiteConfig(
+            key="t2",
+            name="示例",
+            base_url="https://demo.test",
+            adapter="json_custom",
+            probe={},
+            fields={
+                "list_url": "{base_url}/list?page={page}",
+                "list_path": "$.results[*]",
+                "id": "$.id",
+                "name": "$.name",
+                "detail_url": "{base_url}/detail?id={id}",
+                "episodes_path": "$.details[0].episodes[*].episodes[*]",
+                "episode_name": "$.name",
+                "episode_url": "$.url",
+                "max_pages": 1,
+                "captcha_backoff": 0.01,
+                "captcha_retries": retries,
+            },
+        )
+
+    @staticmethod
+    def _routes() -> dict:
+        detail = {
+            "details": [
+                {"episodes": [{"episodes": [{"name": "第01集", "url": "https://cdn/1.m3u8"}]}]}
+            ]
+        }
+        return {
+            "page=1": {"results": [{"id": "7", "name": "片7"}]},
+            "/detail": detail,
+        }
+
+    def test_a_transient_challenge_is_paused_and_retried(self) -> None:
+        http = self.OnceChallenged(self._routes())
+        ctx = make_ctx(http)
+        data = __import__("asyncio").run(JsonCustomAdapter().collect(self._site(2), ctx))
+
+        assert len(data.vods) == 1, "the title was dropped instead of retried"
+        assert data.vods[0].lines, "the retry did not recover the episodes"
+        assert ctx.stats.get("captcha_pauses") == 1
+        assert not any(e["where"] == "json_custom:ratelimit" for e in ctx.errors)
+
+    def test_without_retries_the_challenge_is_reported(self) -> None:
+        http = self.OnceChallenged(self._routes())
+        ctx = make_ctx(http)
+        __import__("asyncio").run(JsonCustomAdapter().collect(self._site(0), ctx))
+        assert any(e["where"] == "json_custom:ratelimit" for e in ctx.errors)

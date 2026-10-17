@@ -44,8 +44,10 @@ request:
       Safari/537.36"
     Referer: "https://tv.lxyy.club/"
     Accept-Language: "zh-CN,zh;q=0.9"
-  # 60 页 + 300 次详情，约 2 请求/秒。站点超限会返回 need_captcha，适配器会明确报错而不是傻等。
-  rate_limit: 0.5
+  # 单位是**每秒令牌数**，不是「每次间隔几秒」。写成 0.5 等于每 2 秒才发一个请求——
+  # 514 次详情就是 17 分钟，而那只是我方自我限速，不是站点在拒绝。实测该站能承受
+  # 3.6 请求/秒（8 个详情 2.2 秒，无验证码），这里取 2 请求/秒作为长期速率。
+  rate_limit: 2.0
   timeout: 25
   retries: 2
   respect_robots: true
@@ -55,11 +57,21 @@ fields:
   # 之后每页 140 条，没有页数上限也没有总数字段。之前按关键词检索只能碰到已收录的少数
   # 片名，等于只抓了站点的边角——这才是「资源这么少」的真正原因。
   # `%` 必须写成 `%25`，否则会被当成 URL 编码的起始符。
-  list_url: "{base_url}/api/proxy.php?action=search&wd=%25&page={page}"
+  # `source=mj` 让服务端只返回该源的行（每页 20 条，而不是 160 条里混 20 条）。
+  list_url: "{base_url}/api/proxy.php?action=search&wd=%25&source=mj&page={page}"
   list_path: "$.results[*]"
   # 站点不返回页数：`total` 是**本页条数**（160），信它就会在第一页停住。
   page_stop: empty
   max_pages: 40
+  # 详情请求单次约 1.4 秒，是纯等待；并发 4 把 8 个请求从 11.1 秒压到 2.2 秒（实测无异常）。
+  concurrency: 4
+  # 列表请求比详情敏感得多：2 请求/秒翻到第 21 页就触发验证码，1.2 秒间隔翻 30 页无异常。
+  # 列表本来就只有 30 页，慢一点只多花半分钟；详情有 600 次，才是该压的那一头。
+  page_gap: 1.2
+  # 验证码是「慢一点」的信号，不是要解的题：等 15 秒再试，最多 2 次。实测同一页一分钟后就
+  # 正常返回，所以暂停通常够。仍然被挑战就记 json_custom:ratelimit 并停止翻页，不硬闯。
+  captcha_backoff: 15
+  captcha_retries: 2
   # 全站列表是 8 个源混排，只留 4k60帧（mj）。不过滤的话每页 160 条里有 140 条是别的源，
   # 白白吃掉标题预算和详情请求。
   require:

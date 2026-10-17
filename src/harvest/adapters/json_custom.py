@@ -27,6 +27,7 @@ direct source.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any, ClassVar
 
 from harvest.adapters.base import CollectContext, empty_site_data, register
@@ -86,6 +87,10 @@ class JsonCustomAdapter:
             categories = list(dict.fromkeys([*categories, *discovered]))
             ctx.stats["keywords_total"] = len(categories)
         max_pages = int(fields.get("max_pages") or site.maccms.max_pages)
+        # A site can tolerate a fast detail endpoint and a much slower list endpoint -- listing
+        # is the expensive query on the server side. `page_gap` is the recipe's answer for that:
+        # a floor on the interval between page requests, on top of the token bucket.
+        page_gap = float(fields.get("page_gap") or 0)
         raw_items: list[dict[str, Any]] = []
         require = dict(fields.get("require") or {})
 
@@ -94,6 +99,7 @@ class JsonCustomAdapter:
                 return True
             return all(str(row.get(k) or "") == str(v) for k, v in require.items())
 
+        first_request = True
         for cid in categories or [""]:
             page, pagecount = 1, 1
             while page <= min(pagecount, max_pages):
@@ -103,6 +109,9 @@ class JsonCustomAdapter:
                 # nothing in the run output explained.
                 if ctx.expired or (ctx.max_titles and len(raw_items) >= ctx.max_titles):
                     break
+                if page_gap and not first_request:
+                    await asyncio.sleep(page_gap)
+                first_request = False
                 url = self._render(list_url, site, {"cat": cid, "page": page, "type": cid})
                 items, payload = await self._fetch(url, site, ctx, fields)
                 if not items:
@@ -200,15 +209,30 @@ class JsonCustomAdapter:
 
         if isinstance(payload, dict) and payload.get("need_captcha"):
             # The site turns on a captcha when it wants fewer requests. It is a rate limit, not a
-            # puzzle to be automated: solving it would be working around the operator's stated
-            # limit. Record it and stop this branch -- a truncated-but-honest run beats one that
-            # quietly returns half a catalogue because every page after the first was challenged.
-            ctx.note_error(
-                "json_custom:ratelimit",
-                f"captcha challenge after {ctx.stats.get('requests', '?')} requests; "
-                f"lower request.rate_limit or max_pages: {url}",
-            )
-            return [], None
+            # puzzle to automate -- answering it would be working around the operator's stated
+            # limit. Waiting is the other way to comply: measured on this site, the challenge is
+            # a moving window (the same page answers normally a minute later), so a pause is
+            # usually enough. `captcha_backoff` says how long to wait before trying again;
+            # without it the walk stops here rather than returning half a catalogue silently.
+            backoff = float(fields.get("captcha_backoff") or 0)
+            retries = int(fields.get("captcha_retries") or 0)
+            for _ in range(retries):
+                ctx.stats["captcha_pauses"] = ctx.stats.get("captcha_pauses", 0) + 1
+                await asyncio.sleep(backoff if backoff > 0 else 10.0)
+                try:
+                    resp = await ctx.require_http().get(url, site=site, tolerate=(403, 404, 500))
+                    payload = safe_json(resp) if resp.status_code == 200 else None
+                except Exception:
+                    payload = None
+                if not isinstance(payload, dict) or not payload.get("need_captcha"):
+                    break
+            if not isinstance(payload, dict) or payload.get("need_captcha"):
+                ctx.note_error(
+                    "json_custom:ratelimit",
+                    f"captcha challenge survived {retries} pause(s); "
+                    f"lower request.rate_limit, raise page_gap or max_pages: {url}",
+                )
+                return [], None
 
         ctx.stats["last_payload_keys"] = sorted(payload.keys())[:25] if isinstance(payload, dict) else []
 
@@ -248,11 +272,11 @@ class JsonCustomAdapter:
     async def _to_vods(
         self, site: SiteConfig, items: list[dict[str, Any]], fields: dict[str, Any], ctx: CollectContext
     ) -> list[Vod]:
-        vods: list[Vod] = []
         require = fields.get("require") or {}
         dropped = 0
+        kept: list[dict[str, Any]] = []
         for item in items:
-            if ctx.max_titles and len(vods) >= ctx.max_titles:
+            if ctx.max_titles and len(kept) >= ctx.max_titles:
                 break
             # `require` keeps only rows whose declared fields match exactly. It exists because a
             # site can expose one shared catalogue for several sources and still list a row per
@@ -264,19 +288,19 @@ class JsonCustomAdapter:
             ):
                 dropped += 1
                 continue
+            if not jp_str(item, str(fields.get("id") or "$.id")):
+                continue
+            if not jp_str(item, str(fields.get("name") or "$.name")):
+                continue
+            kept.append(item)
+
+        details = await self._fetch_details(site, kept, fields, ctx)
+
+        vods: list[Vod] = []
+        for item in kept:
             vid = jp_str(item, str(fields.get("id") or "$.id"))
             name = jp_str(item, str(fields.get("name") or "$.name"))
-            if not vid or not name:
-                continue
-
-            lines = self._episode_lines(item, fields)
-            detail: dict[str, Any] = {}
-            if not lines:
-                detail_url = str(fields.get("detail_url") or "")
-                if detail_url:
-                    lines, detail = await self._episode_lines_from_detail(
-                        self._render(detail_url, site, {"id": vid, "vid": vid}), site, ctx, fields
-                    )
+            lines, detail = details.get(vid, ([], {}))
 
             def field(key: str, item: dict[str, Any] = item, detail: dict[str, Any] = detail) -> str:
                 """Read a field from the list item, falling back to the detail payload.
@@ -311,6 +335,69 @@ class JsonCustomAdapter:
         if dropped:
             ctx.stats["require_dropped"] = dropped
         return vods
+
+    async def _fetch_details(
+        self,
+        site: SiteConfig,
+        items: list[dict[str, Any]],
+        fields: dict[str, Any],
+        ctx: CollectContext,
+    ) -> dict[str, tuple[list[Line], dict[str, Any]]]:
+        """Fetch every missing detail payload, up to `fields.concurrency` at a time.
+
+        Detail endpoints are where a catalogue walk spends its time: measured on the recipe this
+        was written for, one detail costs ~1.4s, so 500 titles serially is 12 minutes of waiting
+        on latency rather than on bandwidth. Four at a time took the same eight requests from
+        11.1s to 2.2s with no rate-limit challenge.
+
+        Sequential is the default (concurrency 1). Raising it is a per-recipe decision, because
+        how much parallelism a site tolerates is a property of that site, not of this adapter.
+        """
+        detail_url = str(fields.get("detail_url") or "")
+        out: dict[str, tuple[list[Line], dict[str, Any]]] = {}
+        if not detail_url:
+            return out
+
+        pending: list[str] = []
+        for item in items:
+            vid = jp_str(item, str(fields.get("id") or "$.id"))
+            if not vid or vid in pending:
+                continue
+            lines = self._episode_lines(item, fields)
+            if lines:
+                # The list already carries playable episodes; no detail request needed.
+                out[vid] = (lines, {})
+                continue
+            pending.append(vid)
+        if not pending:
+            return out
+
+        concurrency = max(1, int(fields.get("concurrency") or 1))
+        if concurrency == 1:
+            for vid in pending:
+                out[vid] = await self._episode_lines_from_detail(
+                    self._render(detail_url, site, {"id": vid, "vid": vid}), site, ctx, fields
+                )
+            return out
+
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def one(vid: str):
+            async with semaphore:
+                return vid, await self._episode_lines_from_detail(
+                    self._render(detail_url, site, {"id": vid, "vid": vid}), site, ctx, fields
+                )
+
+        results = await asyncio.gather(*(one(vid) for vid in pending), return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                # One broken title must not lose the other 499.
+                ctx.note_error("json_custom:detail", f"{type(result).__name__}: {result}")
+                continue
+            vid, payload = result
+            out[vid] = payload
+        ctx.stats["detail_concurrency"] = concurrency
+        return out
 
     async def _episode_lines_from_detail(
         self, url: str, site: SiteConfig, ctx: CollectContext, fields: dict[str, Any]
