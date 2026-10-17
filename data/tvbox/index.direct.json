@@ -40,10 +40,14 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-recipe-gw2",
-  "generated_at": "2026-10-17T08:09:43+00:00",
+  "version": "direct-lxyy-live",
+  "generated_at": "2026-10-17T08:20:56+00:00",
   "generated_by": "tvbox-harvest",
   "_skipped": [
+    {
+      "key": "lxyy-4k60",
+      "reason": "no_api"
+    },
     {
       "key": "zhuiying",
       "reason": "tier4_needs_bridge"

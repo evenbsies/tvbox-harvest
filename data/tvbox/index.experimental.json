@@ -1,6 +1,21 @@
 {
   "sites": [
     {
+      "key": "lxyy-4k60",
+      "name": "洛雪TV·4k60帧",
+      "type": 1,
+      "api": "https://tvbox.myeven.ccwu.cc/vod/lxyy-4k60",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 0,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "validation-lziapi",
       "name": "采集接口验证站",
       "type": 1,
@@ -55,8 +70,8 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-recipe-gw2",
-  "generated_at": "2026-10-17T08:09:43+00:00",
+  "version": "experimental-lxyy-live",
+  "generated_at": "2026-10-17T08:20:56+00:00",
   "generated_by": "tvbox-harvest",
   "gateway": "https://tvbox.myeven.ccwu.cc",
   "_carried_over": [
