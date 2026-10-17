@@ -268,6 +268,44 @@ jsDelivr 把分支引用解析成 commit 之后按边缘缓存最长 12 小时�
 
 ---
 
+## 故障排查：域名突然解析不到
+
+症状：`dig`/`curl` 报 `getaddrinfo failed`，但**同一个域下的其它子域正常**，Worker 的
+自定义域名绑定在 API 里也显示 `enabled: true`。实测就这样丢过一次记录：
+
+```
+myeven.ccwu.cc            -> 104.21.82.39   ✓
+yvigojknjnn.myeven.ccwu.cc -> 104.21.82.39   ✓
+tvbox.myeven.ccwu.cc       -> NXDOMAIN       ✗   ← 绑定存在，记录没了
+```
+
+原因是**绑定记录与 DNS 记录会脱钩**：`wrangler deploy` 看到绑定已存在就不再碰 DNS，
+于是重复部署也修不好。恢复步骤（不需要 DNS 权限，`workers:write` 就够）：
+
+```bash
+# 1. 删掉这条失效的绑定（换成你的 domain id，从下一条命令里找）
+curl -X DELETE "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/domains/$DOMAIN_ID" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+
+# 2. 重新部署，wrangler 会重建绑定并顺带重建 DNS 记录
+npx wrangler deploy
+```
+
+查 binding id：
+
+```bash
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/domains" \
+     -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"
+```
+
+注意 `POST /workers/domains` 用 API token 鉴权会返回 `405 Method not allowed for this
+authentication scheme`——重建这条路只能走 wrangler，不能直接调 API。
+
+诊断顺序也很重要：先看同域其它子域解析是否正常。都正常就说明是这条记录的个别问题，
+不必怀疑 NS、代理或本地网络；`ipconfig /flushdns` 只在「所有域名都解析不了」时才有意义。
+
+---
+
 ## 不部署网关会怎样
 
 完全可以用。`data/tvbox/index.json` 是**直连版**，只包含能直连的 T1/T2 站，零依赖零成本。不部署网关时：
