@@ -17,7 +17,7 @@
     },
     {
       "key": "validation-lziapi",
-      "name": "采集接口验证站",
+      "name": "聚合影视接口",
       "type": 1,
       "api": "https://cj.lziapi.com/api.php/provide/vod/",
       "searchable": 1,
@@ -70,8 +70,8 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "gateway-covers",
-  "generated_at": "2026-10-17T08:59:05+00:00",
+  "version": "gateway-rename",
+  "generated_at": "2026-10-17T09:05:45+00:00",
   "generated_by": "tvbox-harvest",
   "gateway": "https://tvbox.myeven.ccwu.cc",
   "_carried_over": [
