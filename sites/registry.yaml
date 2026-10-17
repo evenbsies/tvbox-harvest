@@ -90,8 +90,8 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-17T04:36:49+00:00'
+    at: '2026-10-17T07:51:50+00:00'
     status: ok
-    vods: 293
-    lines: 586
-    filtered: 7
+    vods: 298
+    lines: 596
+    filtered: 8

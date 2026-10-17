@@ -17,7 +17,22 @@
     }
   ],
   "lives": [],
-  "parses": [],
+  "parses": [
+    {
+      "name": "洛雪4K",
+      "type": 1,
+      "url": "https://tv.lxyy.club/json-player.php?route=official_musbpyqz&url=",
+      "ext": {
+        "player_codes": [
+          "qq",
+          "bilibili",
+          "rrmj",
+          "hmdj"
+        ],
+        "official_only": true
+      }
+    }
+  ],
   "flags": [],
   "rules": [],
   "spider": "",
@@ -25,7 +40,7 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-39003138571",
-  "generated_at": "2026-10-17T04:37:11+00:00",
+  "version": "experimental-39015141907",
+  "generated_at": "2026-10-17T07:52:16+00:00",
   "generated_by": "tvbox-harvest"
 }
