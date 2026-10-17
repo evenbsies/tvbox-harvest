@@ -21,7 +21,10 @@ key: lxyy-4k60
 name: 洛雪TV·4k60帧
 base_url: https://tv.lxyy.club
 adapter: json_custom
-enabled: false
+# 第二个启用的站。选它是因为成本最低：详情接口直接给 .m3u8，不需要浏览器、不需要解析器，
+# 一个 HTTP 客户端就能跑完；同时它的目录只能按关键词检索，所以覆盖面受 probe.categories
+# 限制——这不是取舍，是对方接口没有「按源浏览」的入口。
+enabled: true
 
 compliance:
   policy: block_adult
@@ -61,6 +64,7 @@ probe:
   categories:
     - 庆余年
     - 繁花
+  gateway: "https://tvbox.myeven.ccwu.cc"
 budget:
   max_titles_per_run: 40
   max_requests_per_site: 200

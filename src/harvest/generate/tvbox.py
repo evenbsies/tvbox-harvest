@@ -255,7 +255,19 @@ def generate_all(
                 if tier >= 3:
                     skipped.append({"key": site.key, "reason": f"tier{tier}_needs_bridge"})
                     continue
-                entry = build_entry(site, data, defaults, gateway_base="", use_gateway=False)
+                # Adaptors build `api` from `probe.gateway`, so a recipe that names its gateway
+                # would otherwise land in the *direct* config with a bridged address -- a
+                # "direct" subscription that secretly needs a gateway. Strip the field for this
+                # flavour rather than teaching every adaptor about flavours: the requirement is
+                # about this config's promise, not about the adaptor.
+                direct_site = site.model_copy(
+                    update={
+                        "probe": {
+                            k: v for k, v in (site.probe or {}).items() if k != "gateway"
+                        }
+                    }
+                )
+                entry = build_entry(direct_site, data, defaults, gateway_base="", use_gateway=False)
                 if not entry.get("api"):
                     skipped.append({"key": site.key, "reason": "no_api"})
                     continue

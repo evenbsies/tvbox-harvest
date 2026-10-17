@@ -168,6 +168,28 @@ class TestGenerateAll:
         config = json.loads((settings.tvbox_dir / "index.direct.json").read_text("utf-8"))
         assert "gateway" not in config
 
+    def test_direct_flavour_never_publishes_a_bridged_api(self, tmp_path):
+        """A Tier-2 site that names its gateway must not leak into the direct config.
+
+        Regression: adaptors build `api` from `probe.gateway`, so once a recipe started declaring
+        its gateway, a Tier-2 site passed the tier gate and was published in `index.json` with a
+        `.../vod/<key>` address -- a "direct" subscription that silently needs the gateway.
+        """
+        from harvest.config import Settings
+
+        settings = Settings(root=tmp_path)
+        settings.ensure_dirs()
+        site = demo_site("json_custom", "t2")
+        site.probe["gateway"] = "https://gw.example"
+        generated = tvbox_mod.generate_all(
+            [(site, demo_data(site))], settings=settings, flavors=("direct", "gateway")
+        )
+        direct = json.loads((settings.tvbox_dir / "index.direct.json").read_text("utf-8"))
+        assert direct["sites"] == []
+        assert generated[0].skipped[0]["reason"] == "no_api"
+        bridged = json.loads((settings.tvbox_dir / "index.gateway.json").read_text("utf-8"))
+        assert bridged["sites"][0]["api"] == "https://gw.example/vod/t2"
+
     def test_experimental_flavour_includes_everything(self, tmp_path):
         from harvest.config import Settings
 
