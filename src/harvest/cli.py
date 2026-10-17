@@ -775,6 +775,76 @@ def prune(
         console.print("no stale per-site artefacts")
 
 
+@app.command("update-ledger")
+def update_ledger(
+    reports: str = typer.Option("", "--reports", help="Report directory (default: data/reports)"),
+) -> None:
+    """Write each site's run outcome back into `sites/registry.yaml`.
+
+    The ledger's own header claims "`last_run` is refreshed each run". It never was: the collect
+    job updates an in-memory Registry and uploads only `data/reports/`, so the update died with
+    its workspace. Three consequences, all visible to users:
+
+    * `last_run` stayed empty forever, so the Issue form's duplicate reply always said
+      "上次采集时间：未知" -- which reads like the pipeline had never run.
+    * `adapter`/`tier` kept whatever the intake wrote (`auto` / `0`) even after a probe had
+      resolved them, so the ledger disagreed with the recipe about the site's own tier, and
+      nothing checked that pair (doctor verifies `base_url` and `enabled`).
+    * Anyone reading the ledger to decide whether a site works got stale answers.
+
+    The report job already merges every site's report, and a report carries adapter, tier, status
+    and counts. So this runs there, after the merge and before the commit: one writer, no artifact
+    collisions, and the result actually lands in the repository.
+
+    Identity fields are deliberately out of scope. `enabled` is a human decision and `base_url`
+    drift is something `doctor` is meant to *report*, not paper over; `name` follows the recipe
+    because the recipe is the site's definition.
+    """
+    settings = get_settings()
+    reports_dir = Path(reports) if reports else settings.reports_dir
+    runs = load_runs(reports_dir)
+    if not runs:
+        console.print("[yellow]no report files found; ledger unchanged[/yellow]")
+        return
+
+    from harvest.models import utcnow_iso
+
+    combined = combine(runs)
+    registry = load_registry(settings)
+    stamp = combined.finished_at or combined.started_at or utcnow_iso()
+
+    touched: list[str] = []
+    for site in combined.sites:
+        entry = registry.find(site.key)
+        if entry is None:
+            # A report for a site the ledger does not know about: the Issue workflow writes both,
+            # so this means the ledger was edited by hand. Say so rather than inventing an entry.
+            console.print(f"  [yellow]{site.key}: not in the ledger; skipped[/yellow]")
+            continue
+        if site.adapter:
+            entry.adapter = site.adapter  # type: ignore[assignment]
+        if site.tier:
+            entry.tier = site.tier
+        recipe = load_recipe(site.key, settings)
+        if recipe is not None and recipe.name:
+            entry.name = recipe.name
+        entry.last_run = {
+            "at": stamp,
+            "status": site.status,
+            "vods": site.vods,
+            "lines": site.lines,
+            "filtered": site.filtered_total,
+        }
+        touched.append(site.key)
+
+    if not touched:
+        console.print("ledger unchanged")
+        return
+
+    save_registry(registry, settings)
+    console.print(f"[green]ledger updated[/green] for {len(touched)} site(s): {', '.join(touched)}")
+
+
 @app.command()
 def summary(
     reports: str = typer.Option("", "--reports", help="Report directory (default: data/reports)"),

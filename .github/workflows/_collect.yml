@@ -283,6 +283,14 @@ jobs:
           line=$(python -m harvest.cli summary --github-output "$GITHUB_OUTPUT")
           echo "::notice::$line"
 
+      - name: Refresh the site ledger
+        # The collect job updates an in-memory Registry and uploads only `data/reports/`, so its
+        # update was discarded with the workspace: `last_run` never got a value (the Issue form's
+        # duplicate reply therefore always said "上次采集时间：未知"), and adapter/tier stayed at
+        # whatever the intake wrote. Doing it here, from the merged reports, means one writer and
+        # a result that actually reaches the commit below.
+        run: python -m harvest.cli update-ledger
+
       - name: Commit and push
         if: inputs.commit
         run: |
