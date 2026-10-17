@@ -18,7 +18,8 @@ import yaml
 
 from harvest.adapters import base
 from harvest.adapters.base import CollectContext
-from harvest.clean.dedupe import clean_site_data, learn_bc_hosts
+from harvest.clean.dedupe import clean_site_data
+from harvest.clean.gambling import learn_from_hosts
 from harvest.config import Settings, get_settings
 from harvest.fetch.http import CircuitOpen, HttpClient, RawRecorder
 from harvest.generate import snapshot as snapshot_mod
@@ -538,15 +539,29 @@ async def run_pipeline(options: RunOptions, settings: Settings | None = None) ->
         if bc_host_counts and not options.dry_run:
             from collections import Counter
 
-            report.learned_bc_hosts = learn_bc_hosts(Counter(bc_host_counts), threshold=5)
+            # `learn_from_hosts` takes the counts directly, which is what we have. It used to go
+            # through a `learn_bc_hosts(DropLog)` wrapper and be handed a Counter, so the moment a
+            # run actually caught a gambling host the whole harvest died with
+            #     AttributeError: 'Counter' object has no attribute 'bc_hosts'
+            # The compliance path was therefore broken exactly when it was doing its job: the
+            # first real hit aborted the run and nothing was published.
+            report.learned_bc_hosts = learn_from_hosts(Counter(bc_host_counts), threshold=5)
 
         if not options.dry_run:
+            # Carry forward enabled sites this run has no data for, exactly as the standalone
+            # `generate` command does. Without it, `harvest collect` locally would overwrite
+            # data/tvbox/index.json with a config listing only the sites it just harvested.
+            carry = {
+                site.key
+                for site in resolve_sites(RunOptions(sites=[], mode=options.mode), settings)
+            }
             generated = tvbox_mod.generate_all(
                 pairs,
                 settings=settings,
                 gateway_base=options.gateway_base,
                 flavors=tuple(options.flavors),
                 run_id=options.run_id,
+                carry_over=carry,
             )
             for item in generated:
                 report.generated.append(

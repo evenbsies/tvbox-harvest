@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 
 from harvest.clean.blacklist import adult_matcher
 from harvest.clean.classify import load_category_map
-from harvest.clean.gambling import check_entry, check_manifest, learn_from_hosts, scan_site_html
+from harvest.clean.gambling import check_entry, check_manifest, scan_site_html
 from harvest.clean.normalize import (
     apply_title_normalization,
     canon_media_url,
@@ -272,10 +272,6 @@ def verify_manifest_urls(site_data: SiteData, manifests: dict[str, str]) -> Drop
                     for reason in verdict.reasons:
                         log.add(reason.split(":")[0], f"{vod.name}:{ep.url[:60]}")
     return log
-
-
-def learn_bc_hosts(dropped: DropLog, threshold: int = 5) -> list[str]:
-    return learn_from_hosts(dropped.bc_hosts, threshold=threshold)
 
 
 def resource_url_canon(url: str) -> str:
