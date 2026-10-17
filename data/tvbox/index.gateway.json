@@ -1,6 +1,21 @@
 {
   "sites": [
     {
+      "key": "guangsu",
+      "name": "光速资源",
+      "type": 1,
+      "api": "https://api.guangsuapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "lxyy-4k60",
       "name": "洛雪TV·4k60帧",
       "type": 1,
@@ -8,6 +23,21 @@
       "searchable": 1,
       "quickSearch": 1,
       "filterable": 0,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "tyyszy",
+      "name": "天涯影视",
+      "type": 1,
+      "api": "https://tyyszyapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
       "changeable": 1,
       "playerType": 2,
       "style": {
@@ -70,11 +100,13 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "gateway-39026484436",
-  "generated_at": "2026-10-17T10:56:34+00:00",
+  "version": "gateway-2026-10-17T11:36:33+00:00",
+  "generated_at": "2026-10-17T11:36:33+00:00",
   "generated_by": "tvbox-harvest",
-  "gateway": "https://tvbox.myeven.ccwu.cc",
   "_carried_over": [
+    "guangsu",
+    "lxyy-4k60",
+    "tyyszy",
     "zhuiying"
   ]
 }

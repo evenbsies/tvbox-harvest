@@ -28,11 +28,11 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-17T10:56:07+00:00'
+    at: '2026-10-17T10:35:25+00:00'
     status: ok
-    vods: 271
-    lines: 271
-    filtered: 29
+    vods: 514
+    lines: 514
+    filtered: 86
 - key: pianku
   name: 片库
   base_url: https://4k01.pianku.online
@@ -80,7 +80,7 @@ sites:
     lines: 3
     filtered: 0
 - key: validation-lziapi
-  name: 聚合影视接口
+  name: 采集接口验证站
   base_url: https://cj.lziapi.com
   adapter: maccms_v10
   tier: 1
@@ -90,8 +90,38 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-17T10:56:07+00:00'
+    at: '2026-10-17T11:36:33+00:00'
     status: ok
-    vods: 295
-    lines: 590
-    filtered: 5
+    vods: 1970
+    lines: 3940
+    filtered: 37
+- key: tyyszy
+  name: 天涯影视
+  base_url: https://tyyszyapi.com
+  adapter: maccms_v10
+  tier: 1
+  enabled: true
+  origin:
+    type: manual
+    note: 公开 MacCMS V10 采集接口；total≈7.3 万，39 个常规分类
+  last_run:
+    at: '2026-10-17T11:29:14+00:00'
+    status: ok
+    vods: 1957
+    lines: 1957
+    filtered: 43
+- key: guangsu
+  name: 光速资源
+  base_url: https://api.guangsuapi.com
+  adapter: maccms_v10
+  tier: 1
+  enabled: true
+  origin:
+    type: manual
+    note: 公开 MacCMS V10 采集接口；total≈11.6 万，44 个常规分类
+  last_run:
+    at: '2026-10-17T11:32:52+00:00'
+    status: ok
+    vods: 1916
+    lines: 3832
+    filtered: 97

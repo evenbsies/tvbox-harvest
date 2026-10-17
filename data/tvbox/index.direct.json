@@ -1,6 +1,36 @@
 {
   "sites": [
     {
+      "key": "guangsu",
+      "name": "光速资源",
+      "type": 1,
+      "api": "https://api.guangsuapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
+      "key": "tyyszy",
+      "name": "天涯影视",
+      "type": 1,
+      "api": "https://tyyszyapi.com/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "validation-lziapi",
       "name": "聚合影视接口",
       "type": 1,
@@ -40,13 +70,11 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-39026484436",
-  "generated_at": "2026-10-17T10:56:34+00:00",
+  "version": "direct-2026-10-17T11:36:33+00:00",
+  "generated_at": "2026-10-17T11:36:33+00:00",
   "generated_by": "tvbox-harvest",
-  "_skipped": [
-    {
-      "key": "lxyy-4k60",
-      "reason": "no_api"
-    }
+  "_carried_over": [
+    "guangsu",
+    "tyyszy"
   ]
 }

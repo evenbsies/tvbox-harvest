@@ -51,6 +51,12 @@ maccms:
   incremental_hours: 24
 
   page_limit: 20
+budget:
+  # 全局默认 300 部对这个源太小：它的 total 是 15.9 万、7979 页。T1 的列表项自带播放地址，
+  # 每页一次请求就换 20 部，所以限制它的从来不是成本，而是这个默认值。
+  max_titles_per_run: 2000
+  max_requests_per_site: 400
+
 tvbox:
   searchable: 1
   quickSearch: 1
