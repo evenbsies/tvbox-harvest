@@ -1,0 +1,31 @@
+{
+  "sites": [
+    {
+      "key": "ffzy",
+      "name": "非凡影视",
+      "type": 1,
+      "api": "https://ffzy5.tv/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    }
+  ],
+  "lives": [],
+  "parses": [],
+  "flags": [],
+  "rules": [],
+  "spider": "",
+  "author": "tvbox-harvest",
+  "wallpaper": "",
+  "ua": "",
+  "requestHeader": {},
+  "version": "site-final6",
+  "generated_at": "2026-10-17T12:05:00+00:00",
+  "generated_by": "tvbox-harvest"
+}

@@ -1,6 +1,21 @@
 {
   "sites": [
     {
+      "key": "ffzy",
+      "name": "非凡影视",
+      "type": 1,
+      "api": "https://ffzy5.tv/api.php/provide/vod/",
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 1,
+      "changeable": 1,
+      "playerType": 2,
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
+    },
+    {
       "key": "guangsu",
       "name": "光速资源",
       "type": 1,
@@ -70,11 +85,17 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-2026-10-17T11:36:33+00:00",
-  "generated_at": "2026-10-17T11:36:33+00:00",
+  "version": "direct-final6",
+  "generated_at": "2026-10-17T12:05:00+00:00",
   "generated_by": "tvbox-harvest",
-  "_carried_over": [
-    "guangsu",
-    "tyyszy"
+  "_skipped": [
+    {
+      "key": "lxyy-4k60",
+      "reason": "no_api"
+    },
+    {
+      "key": "zhuiying",
+      "reason": "tier4_needs_bridge"
+    }
   ]
 }
