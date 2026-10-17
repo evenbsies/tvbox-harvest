@@ -374,6 +374,32 @@ parses:
 
 ---
 
+## 从别处的 TVBox 配置里筛条目
+
+别人发布在 GitHub 上的 TVBox 配置本身就是一份「源目录」。要看里面有哪些写着 4K 的条目：
+
+```bash
+python -m harvest.cli import https://raw.githubusercontent.com/<owner>/<repo>/main/list.json --match 4K
+```
+
+加 `--write` 会把命中项写到 `sources/imported/<host>/<path>.yaml`，带 `provenance`（来源 URL、
+抓取时间、匹配正则、原配置条目总数）。**这个目录 pipeline 不读**：它不在台账里，`collect`
+和 `generate` 都不会碰。导入只提供线索，把某一条变成真源仍然要写 `sites/<key>.yaml` 配方。
+
+三条口径：
+
+1. **只匹配名字。** `4K影视`、`洛雪4K`、`4KTV` 会被留下；名字里没有 4K 的不会。全角 `４K` 会归一成 `4K`，
+   中文「四K」不会——那是另一个字符串，要同时命中就写 `--match "4K|四K"`。
+2. **`--match` 为空等于「不导入」**，不是「导入全部」。1659 条站点一次性倒进来不是一个可以悄悄发生的动作。
+3. **名字不是事实。** 实测过三次：`4k60帧`、`蓝光高清`、`HD` 标注背后的流都是 1920x1080。
+   要判断一条流是不是 4K，用 `scorecard --streams` 读清单或 SPS。
+
+首次试跑的结果（`sources/imported/README.md` 有完整表）：一份 1659 站点的配置里 name 含 4K 的有 101 条，
+**全是 `type: 3` 的网盘爬虫站**（`csp_*`），本项目抓不到；另一份 101 站点的配置里只有 1 条，
+是 parse `4KTV`。这就是现状：**「4K 线路」在公开配置里主要是网盘站，不是采集接口。**
+
+---
+
 ## 仓库结构
 
 ```

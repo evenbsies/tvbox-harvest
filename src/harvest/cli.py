@@ -923,6 +923,56 @@ def lines(
         )
 
 
+@app.command("import")
+def import_config_command(
+    url: str = typer.Argument(..., help="URL of a TVBox config JSON published elsewhere"),
+    match: str = typer.Option("", "--match", help="Only keep entries whose name matches (regex), e.g. 4K"),
+    kind: str = typer.Option("both", "--kind", help="both | site | parse"),
+    write: bool = typer.Option(False, "--write", help="Write candidates to sources/imported/"),
+    as_json: bool = typer.Option(False, "--json", help="Emit raw output as JSON"),
+) -> None:
+    """Pull the entries of someone else's TVBox config whose name matches.
+
+    This is a review aid, not a pipeline stage: it reads names, writes a candidates file, and
+    enables nothing. A name is a label, not a measurement -- the scorecard's `measured_is_4k`
+    is what settles whether the stream behind a `4K` label is 4K.
+    """
+    from harvest.import_config import import_config, write_candidates
+
+    if not match.strip():
+        console.print(
+            "[yellow]没有 --match：会导入全部条目。4000 条站点一次性导入通常不是你要的，"
+            "建议先 --match 4K 看命中多少。[/yellow]"
+        )
+
+    patterns = [x.strip() for x in match.split(",") if x.strip()]
+    result = asyncio.run(import_config(url, match=patterns, kind=kind))
+
+    if as_json:
+        print(json.dumps(result.as_dict(), ensure_ascii=False, indent=2))
+    else:
+        console.print(
+            f"[bold]{result.source_url}[/bold] · 站点 {result.total_sites} · 解析 {result.total_parses} "
+            f"· 命中 {len(result.matched)}"
+        )
+        for note in result.notes:
+            console.print(f"  [yellow]{note}[/yellow]")
+        if result.matched:
+            table = Table(title=f"name 匹配 {patterns or '（全部）'}", header_style="bold")
+            table.add_column("类型")
+            table.add_column("名称")
+            table.add_column("地址")
+            table.add_column("type", justify="right")
+            for entry in result.matched:
+                address = entry.address if len(entry.address) <= 54 else entry.address[:51] + "..."
+                table.add_row(entry.kind, entry.name, address, str(entry.type or ""))
+            console.print(table)
+
+    if write and result.matched:
+        path = write_candidates(result)
+        console.print(f"[green]written[/green] {path}  [dim]（供复核；pipeline 不读取）[/dim]")
+
+
 @app.command("update-ledger")
 def update_ledger(
     reports: str = typer.Option("", "--reports", help="Report directory (default: data/reports)"),

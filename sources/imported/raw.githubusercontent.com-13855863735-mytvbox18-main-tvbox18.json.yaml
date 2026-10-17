@@ -1,0 +1,15 @@
+'# 说明': 由 `harvest import` 生成，供人工复核；pipeline 不会自动读取本文件。
+provenance:
+  source: https://raw.githubusercontent.com/13855863735/myTvBox18/main/tvbox18.json
+  fetched_at: '2026-10-17T04:42:07+00:00'
+  match:
+  - 4K
+  totals:
+    sites: 101
+    parses: 22
+sites: []
+parses:
+- kind: parse
+  name: 4KTV
+  address: https://jx.4kdv.com/?url=
+  type: null
