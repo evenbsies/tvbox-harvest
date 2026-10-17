@@ -28,11 +28,11 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-17T10:35:25+00:00'
+    at: '2026-10-17T10:56:07+00:00'
     status: ok
-    vods: 514
-    lines: 514
-    filtered: 86
+    vods: 271
+    lines: 271
+    filtered: 29
 - key: pianku
   name: 片库
   base_url: https://4k01.pianku.online
@@ -80,7 +80,7 @@ sites:
     lines: 3
     filtered: 0
 - key: validation-lziapi
-  name: 采集接口验证站
+  name: 聚合影视接口
   base_url: https://cj.lziapi.com
   adapter: maccms_v10
   tier: 1
@@ -90,8 +90,8 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-17T07:51:50+00:00'
+    at: '2026-10-17T10:56:07+00:00'
     status: ok
-    vods: 298
-    lines: 596
-    filtered: 8
+    vods: 295
+    lines: 590
+    filtered: 5
