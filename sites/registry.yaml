@@ -28,7 +28,7 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-17T10:01:59+00:00'
+    at: '2026-10-17T10:35:25+00:00'
     status: ok
     vods: 514
     lines: 514
