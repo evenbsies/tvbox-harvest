@@ -18,21 +18,6 @@ sites:
   origin:
     type: template
   last_run: {}
-- key: validation-lziapi
-  name: 采集接口验证站
-  base_url: https://cj.lziapi.com
-  adapter: maccms_v10
-  tier: 1
-  enabled: true
-  origin:
-    type: manual
-    note: Tier-1 pipeline validation target; first published source
-  last_run:
-    at: '2026-10-16T14:25:08+00:00'
-    status: ok
-    vods: 198
-    lines: 396
-    filtered: 8
 - key: 4kvm
   name: 4KVM
   base_url: https://www.4kvm.tv
