@@ -110,8 +110,9 @@ budget:
 
 tvbox:
   # Tier 4 has no upstream API to point at, so this entry is only usable once the optional
-  # edge gateway is deployed. `{gateway}` is substituted at generation time from the
-  # --gateway flag / HARVEST_GATEWAY variable.
+  # edge gateway is deployed. The `api` field is *not* written here -- `harvest generate
+  # --gateway <url>` fills it as `<url>/vod/<key>` for every tier >= 3 entry. Do not add a
+  # literal `api:` below: recipe overrides are applied last and would pin a dead address.
   type: 1
   searchable: 1
   quickSearch: 1

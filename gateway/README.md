@@ -52,15 +52,18 @@ quickSearch: 1
 ```bash
 cd gateway
 npm install
+npx wrangler login          # 浏览器登录，账号绑定，必须在你自己的机器上做
 
-# 指向你的仓库（public 仓库才能走 jsDelivr）
-# 编辑 wrangler.toml 里的 REPO
+# 确认 wrangler.toml 里的 REPO 是你的仓库（public 仓库才能走 jsDelivr）
+# 默认已填 evenbsies/tvbox-harvest
 
-# 只在需要 /admin/refresh 时才配；它同时是 HMAC 校验密钥
-wrangler secret put DISPATCH_TOKEN
-
-wrangler deploy
+npx wrangler deploy
 ```
+
+**首次部署不需要任何 secret。** `DISPATCH_TOKEN` 只服务于 `/admin/refresh`（主动触发重采），
+读路径一个都不用。先部署、先验证订阅能用，再决定要不要配它。
+
+`npx wrangler deploy --dry-run` 可以在登录前先确认打包没问题（当前产物 9.32 KiB / gzip 3.29 KiB）。
 
 `DISPATCH_TOKEN` 需要一个 GitHub **fine-grained PAT**，权限只要两项：
 
@@ -69,12 +72,51 @@ wrangler deploy
 
 把它填进 `wrangler secret` 后，同一个值也用作 `/admin/refresh` 的 HMAC 密钥。
 
-### 修改 config 后回写 config 变量
+### 部署后自查（拿真实 URL 验一遍）
+
+`wrangler deploy` 成功会打印 `https://tvbox-harvest-gateway.<子域>.workers.dev`。先用它跑这四条：
 
 ```bash
-# 让 Actions 生成时自动带上网关地址，T3/T4 站才会进 index.gateway.json 的 api 字段
+GW="https://tvbox-harvest-gateway.<子域>.workers.dev"
+
+curl -s "$GW/health"
+# {"ok":true,"snapshot_base":"https://cdn.jsdelivr.net/gh/<REPO>@main/data/snapshot","ttl":600}
+
+curl -s "$GW/" | head -c 400
+# 自查页：已发布站点 + 片量 + 快照时间
+
+curl -s "$GW/vod/validation-lziapi?ac=class" | head -c 200
+# {"code":1,...,"list":[{"type_id":"1","type_name":"电影"},...]}  (44 个分类)
+
+curl -s "$GW/vod/validation-lziapi?ac=list&limit=2"
+```
+
+`/health` 的 `snapshot_base` 是**唯一**需要盯的字段：它必须是 jsDelivr 上真实存在的那条路径。
+若它指向别处，`/` 和 `/vod/*` 都会 500，而 `/health` 依然 200——这个不对称是有意的，健康检查
+不该因为数据源缺失就判定 Worker 挂了。
+
+T1/T2 站走直连，不需要网关；用它验证的意义是**证明 Worker 能读到快照**，这一步通了，之后启用
+T3/T4 站才只取决于采集，不取决于部署。
+
+### 让 Actions 生成时带上网关地址
+
+T3/T4 站的 `api` 字段由 `harvest generate --gateway <url>` 填入。要让**定时运行**也带上它，
+在仓库层面加一个变量（Settings → Secrets and variables → Actions → **Variables** 标签 →
+New repository variable）：
+
+| Name | Value |
+|---|---|
+| `HARVEST_GATEWAY` | `https://tvbox-harvest-gateway.<子域>.workers.dev` |
+
+装了 `gh` 的话等价于：
+
+```bash
 gh variable set HARVEST_GATEWAY --body "https://<your-worker>.workers.dev"
 ```
+
+> 用 Variables 而不是 Secrets：这个地址会出现在**公开的** `index.gateway.json` 里，本来就不是
+> 秘密；放进 Secrets 反而无法在 `wrangler.toml` 之外复用。
+
 
 ---
 
