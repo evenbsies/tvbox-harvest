@@ -40,7 +40,17 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-39015141907",
-  "generated_at": "2026-10-17T07:52:16+00:00",
-  "generated_by": "tvbox-harvest"
+  "version": "direct-local-merge",
+  "generated_at": "2026-10-17T07:59:11+00:00",
+  "generated_by": "tvbox-harvest",
+  "gateway": "https://tvbox.myeven.ccwu.cc",
+  "_skipped": [
+    {
+      "key": "zhuiying",
+      "reason": "tier4_needs_bridge"
+    }
+  ],
+  "_carried_over": [
+    "validation-lziapi"
+  ]
 }

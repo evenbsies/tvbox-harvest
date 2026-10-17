@@ -13,6 +13,20 @@ name = "tvbox-harvest-gateway"
 main = "src/index.js"
 compatibility_date = "2024-11-01"
 
+# A custom domain is NOT optional in practice. `*.workers.dev` is DNS-poisoned on mainland
+# networks -- measured here: the name resolved to 2a03:2880:f10c:283:face:b00c:0:25de (a
+# Facebook range) and 50.117.117.42, both TCP-timing-out, while the zone below resolved to
+# real Cloudflare anycast addresses and answered 200. A subscription URL has to be reachable
+# from the device that plays the video, so the Worker is served from a subdomain of a zone
+# that is already on Cloudflare.
+#
+# MUST be top-level (before `[vars]`): TOML keeps a table open until the next header, so a
+# `routes` key placed after `[vars]` silently becomes an environment variable named "routes"
+# and the custom domain is never created.
+routes = [
+  { pattern = "tvbox.myeven.ccwu.cc", custom_domain = true }
+]
+
 [vars]
 # REQUIRED. The repository holding the snapshots, as "owner/name".
 # jsDelivr's `/gh/` endpoint only serves public repositories.
@@ -30,11 +44,6 @@ CACHE_TTL = "600"
 # DISPATCH_TOKEN is a SECRET, not a var -- never commit it. It doubles as the HMAC key for
 # /admin/refresh:
 #   wrangler secret put DISPATCH_TOKEN
-
-# Uncomment to restrict the gateway to a custom domain.
-# routes = [
-#   { pattern = "tvbox-gw.example.com", custom_domain = true }
-# ]
 
 [observability]
 enabled = true

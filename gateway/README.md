@@ -194,6 +194,53 @@ curl -X POST "https://<your-worker>.workers.dev/admin/refresh" \
 
 ---
 
+## 大陆网络下的两个硬约束（实测，2026-10-17）
+
+这两条不是偏好问题，是「订阅地址在播放设备上打不开」的程度问题。
+
+### 1. `*.workers.dev` 必须换成自定义域名
+
+`wrangler deploy` 默认给你的 `<name>.<子域>.workers.dev` 在大陆网络上被 DNS 污染：
+
+```
+DNS: ['2a03:2880:f10c:283:face:b00c:0:25de', '50.117.117.42']
+TCP 2a03:...:25de: FAIL TimeoutError
+TCP 50.117.117.42: FAIL TimeoutError
+```
+
+第一条是 **Facebook 的地址段**（`face:b00c` 是它的标志），第二条是常见的污染地址；两个都连不上。
+换成已托管在 Cloudflare 的域名下的子域，解析到真实 anycast（`104.21.82.39` / `172.67.152.170`），
+直连 200：
+
+```toml
+# 必须是顶层键，放在 [vars] 之前
+routes = [
+  { pattern = "tvbox.<你的域名>", custom_domain = true }
+]
+```
+
+> **TOML 表的作用域陷阱**：`[vars]` 会一直延续到下一个表头，所以 `routes` 写在 `[vars]` 下面
+> 会变成一个名叫 `routes` 的**环境变量**，自定义域名根本不会被创建。`wrangler deploy` 的输出
+> 会把它列在 `- Vars:` 下面——看到这个就是踩坑了，正确时输出的是
+> `tvbox.<你的域名> (custom domain)`。
+
+### 2. 客户端侧不要用 `cdn.jsdelivr.net`
+
+网关自己读 `SNAPSHOT_BASE` 是从 Cloudflare 边缘发起的，走 `cdn.jsdelivr.net` 没问题。但**订阅
+配置文件本身是播放设备去拉的**，那一步得用可达的边缘域名：
+
+| 域名 | 直连结果 |
+|---|---|
+| `cdn.jsdelivr.net` | 三次全部 `000` |
+| `fastly.jsdelivr.net` | 200 |
+| `gcore.jsdelivr.net` | 200 |
+| `testingcf.jsdelivr.net` | 200 |
+
+同一个 jsDelivr，换边缘域名而已。**部署完必须用播放的那台设备实测一次订阅地址**，不要用构建机
+的结果代替。
+
+---
+
 ## 不部署网关会怎样
 
 完全可以用。`data/tvbox/index.json` 是**直连版**，只包含能直连的 T1/T2 站，零依赖零成本。不部署网关时：

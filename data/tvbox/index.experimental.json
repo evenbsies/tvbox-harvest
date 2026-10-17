@@ -14,6 +14,21 @@
         "type": "rect",
         "ratio": 1.4
       }
+    },
+    {
+      "key": "zhuiying",
+      "name": "追影",
+      "type": 1,
+      "searchable": 1,
+      "quickSearch": 1,
+      "filterable": 0,
+      "changeable": 1,
+      "playerType": 2,
+      "api": "https://tvbox.myeven.ccwu.cc/vod/zhuiying",
+      "style": {
+        "type": "rect",
+        "ratio": 1.4
+      }
     }
   ],
   "lives": [],
@@ -40,7 +55,11 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-39015141907",
-  "generated_at": "2026-10-17T07:52:16+00:00",
-  "generated_by": "tvbox-harvest"
+  "version": "experimental-local-merge",
+  "generated_at": "2026-10-17T07:59:11+00:00",
+  "generated_by": "tvbox-harvest",
+  "gateway": "https://tvbox.myeven.ccwu.cc",
+  "_carried_over": [
+    "validation-lziapi"
+  ]
 }

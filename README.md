@@ -174,13 +174,28 @@ budget:
 https://cdn.jsdelivr.net/gh/<你的用户名>/tvbox-harvest@main/data/tvbox/index.json
 ```
 
+大陆网络下 `cdn.jsdelivr.net` 可能连不上（实测：直连三次全部失败，TCP 超时；同一台机器上
+`fastly.jsdelivr.net` / `gcore.jsdelivr.net` / `testingcf.jsdelivr.net` 全部 200）。同一份文件，
+换边缘域名即可：
+
+```
+https://fastly.jsdelivr.net/gh/<你的用户名>/tvbox-harvest@main/data/tvbox/index.json
+https://gcore.jsdelivr.net/gh/<你的用户名>/tvbox-harvest@main/data/tvbox/index.json
+```
+
+这是同一个 jsDelivr，只是走不同 CDN 边缘。**订阅地址得在播放设备上能打开才算数**，所以先在这台
+设备上 `curl` 一下再用。
+
 三份产物，按需选择：
 
 | 文件 | 内容 | 适用 |
 |---|---|---|
-| `index.json` | 可直连的站点（T1/T2） | 默认订阅 |
-| `index.gateway.json` | 配了网关照的站点（含 T3/T4） | 已部署网关照 |
+| `index.json` | 可直连的站点（**仅 T1**，原生 MacCMS） | 默认订阅 |
+| `index.gateway.json` | 经网关照转写的站点（T2/T3/T4 + T1） | 已部署网关照 |
 | `index.experimental.json` | 全部站点，含实验性 | 排查用 |
+
+> T2 不在 `index.json` 里：自定义 JSON 接口 TVBox 读不懂，必须经网关转写成 MacCMS 形状。
+> 只有本来就说 MacCMS 的 T1 站能直连。
 
 单站订阅：`data/tvbox/sites/<key>.json`。
 
