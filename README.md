@@ -279,6 +279,33 @@ compliance:
 
 ---
 
+## 评估一个候选站点
+
+决定要不要收录某个源之前，先量它，而不是凭印象。这个命令不写任何文件，只出数字：
+
+```bash
+python -m harvest.cli scorecard https://example.com/ --sample 60 --streams 5
+```
+
+四个维度，每个都标注了**测法**：
+
+| 维度 | 关键指标 | 怎么来的 |
+|---|---|---|
+| **速度** | `ms_per_title`、`requests_per_title`、`kb_per_title`、`errors`、`statuses` | 抽样采集的墙钟时间与 `HttpClient` 的请求计数 |
+| **画质** | `max_resolution`、`resolutions_seen`；另有 `claims_*` 自述值 | `max_resolution` **实际读取 m3u8 主播放列表的 `RESOLUTION=`**；`claims_*` 只是站点在 `vod_remarks` 里的说法 |
+| **广告** | `gambling_domains_hit`、`site_ad_signals`、`promo_tail_urls`、`adult_entries_dropped` | 本底黑名单 + 首页广告信号扫描 + 播放地址里的推广参数 |
+| **内容质量** | `playable_ratio`、`lines_per_title`、`categories`、`updated_within_7d` | 清洗后的统计 |
+
+设计上有三条刻意的取舍，值得知道：
+
+1. **没有总分。** 一个综合分数会把权重藏起来，而权重是「你愿意拿什么换什么」的判断——4 万条挂在满是广告的站上，并不比 3 千条干净的更「好」，除非那是你的偏好。命令只给数字，排序由你决定。
+2. **「未测量」显示为 `—`，与 `0` 不同。** `0` 是量到了零，`—` 是没量到。画质尤其明显：`claims_resolution` 为 0 只说明站点没在简介里写分辨率，不说明它不高清——所以还有 `streams_*` 那一组真读清单的测量。
+3. **探测未完成时显示 `tier ?`。** 站点无响应、超时或被拦截，是**这次没量到**，不是「站点不可用」。把前者报成后者会让人直接放弃一个其实正常的源。
+
+一个实测例子（对已收录站点的抽样）：`HD` 这两个字出现在 298 条里的 289 条备注中——只认「1080/4K/蓝光」的正则会把它全部算作「无高清」，于是报出一个自信但错误的 0.0。所以画质被拆成「自述分辨率」与「泛 HD 标签」两组，且另有清单实测兜底。
+
+---
+
 ## 仓库结构
 
 ```

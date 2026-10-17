@@ -775,6 +775,65 @@ def prune(
         console.print("no stale per-site artefacts")
 
 
+@app.command()
+def scorecard(
+    url: str = typer.Argument(..., help="Site home URL to measure"),
+    sample: int = typer.Option(60, "--sample", help="How many titles to collect"),
+    streams: int = typer.Option(
+        5, "--streams", help="How many HLS playlists to read for a real resolution (0 disables)"
+    ),
+    browser: bool = typer.Option(False, "--browser", help="Allow a headless browser (Tier 4)"),
+    as_json: bool = typer.Option(False, "--json", help="Emit raw measurements as JSON"),
+) -> None:
+    """Measure a candidate source: speed, HD claims, advertising pressure, catalogue quality.
+
+    Deliberately reports numbers instead of a recommendation. There is no composite score, because
+    one would hide the weighting, and the weighting is a judgement about what you are willing to
+    trade -- 40 000 titles on an ad-riddled host is not "better" than 3 000 clean ones except by
+    your own priorities.
+
+    Nothing is written to the working tree: this is a measurement, not a harvest.
+    """
+    from harvest.scorecard import score
+
+    try:
+        card = asyncio.run(
+            score(url, sample=sample, streams=streams, allow_browser=browser)
+        )
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=2) from None
+
+    if as_json:
+        print(json.dumps(card.as_dict(), ensure_ascii=False, indent=2))
+        return
+
+    console.print(f"[bold]{card.base_url}[/bold]")
+    # "tier ?" when the probe did not finish: printing 0 would present a failed measurement as a
+    # finding about the site.
+    tier_text = "?" if card.probe_status == "unknown" else str(card.tier)
+    console.print(
+        f"tier {tier_text} · adapter {card.adapter or '?'} · sampled {card.sampled} titles "
+        f"· probe {card.probe_ms} ms · collect {card.collect_ms} ms"
+    )
+    for message in card.errors:
+        console.print(f"  [yellow]{message}[/yellow]")
+
+    for dimension in card.dimensions:
+        table = Table(title=dimension.name, show_header=True, header_style="bold")
+        table.add_column("metric")
+        table.add_column("value", justify="right")
+        for key, value in dimension.values.items():
+            table.add_row(key, "—" if value is None else str(value))
+        console.print(table)
+        if dimension.note:
+            console.print(f"  [dim]{dimension.note}[/dim]")
+
+    console.print(
+        "[dim]未测量显示为 —，与 0 不同：0 是量到了零，— 是没量到。如何权衡由你决定。[/dim]"
+    )
+
+
 @app.command("update-ledger")
 def update_ledger(
     reports: str = typer.Option("", "--reports", help="Report directory (default: data/reports)"),
