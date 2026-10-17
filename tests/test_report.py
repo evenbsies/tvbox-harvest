@@ -310,3 +310,119 @@ def test_summary_command_survives_an_empty_report_dir(tmp_path: Path) -> None:
 
     assert result.exit_code == 0, result.output
     assert "summary=no report produced" in output.read_text(encoding="utf-8")
+
+
+# -- BC host learning ---------------------------------------------------------------------------
+#
+# `run_pipeline` learns BC hosts too, but in CI it runs inside each per-site collect job, whose
+# workspace is thrown away -- and N parallel jobs writing the same learned-blacklist file would
+# collide when their artifacts merge. So nothing was ever persisted: the blacklist could only
+# change by hand, which defeats the point of learning it. The report job sees every site's
+# `bc_hits` in one place, so `summary` is where the one writer lives, and the commit step stages
+# `config`.
+
+
+def _root_with_blacklist(tmp_path: Path) -> Settings:
+    """A temp root carrying the real config/, since the learning writes into it."""
+    import shutil
+
+    repo_root = Path(__file__).resolve().parents[1]
+    shutil.copytree(repo_root / "config", tmp_path / "config")
+    return Settings(root=tmp_path)
+
+
+def _report_with_bc(host: str, hits: int) -> RunReport:
+    report = RunReport(mode="full")
+    report.add_site(_site("alpha", bc_hits={host: hits}))
+    return report
+
+
+def test_summary_promotes_a_repeatedly_hit_bc_host(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HARVEST_ROOT", str(tmp_path))
+    settings = _root_with_blacklist(tmp_path)
+    get_settings.cache_clear()
+    write_report(_report_with_bc("bc-ad.example", hits=5), settings)
+
+    result = RUNNER.invoke(app, ["summary", "--reports", str(tmp_path / "data" / "reports")])
+    get_settings.cache_clear()
+
+    assert result.exit_code == 0, result.output
+    learned = tmp_path / "config" / "blacklist" / "bc_domains.learned.txt"
+    assert learned.is_file(), "the BC host was not persisted; the learning was thrown away"
+    assert "bc-ad.example" in learned.read_text(encoding="utf-8")
+
+
+def test_summary_does_not_promote_below_the_threshold(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Four hits is not five; the threshold must mean something."""
+    monkeypatch.setenv("HARVEST_ROOT", str(tmp_path))
+    settings = _root_with_blacklist(tmp_path)
+    get_settings.cache_clear()
+    write_report(_report_with_bc("bc-ad.example", hits=4), settings)
+
+    result = RUNNER.invoke(app, ["summary", "--reports", str(tmp_path / "data" / "reports")])
+    get_settings.cache_clear()
+
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "config" / "blacklist" / "bc_domains.learned.txt").exists()
+
+
+def test_summary_sums_hits_across_sites(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A host advertised across several sites is exactly the case worth learning."""
+    monkeypatch.setenv("HARVEST_ROOT", str(tmp_path))
+    settings = _root_with_blacklist(tmp_path)
+    get_settings.cache_clear()
+
+    report = RunReport(mode="full")
+    report.add_site(_site("alpha", bc_hits={"bc-ad.example": 3}))
+    report.add_site(_site("beta", bc_hits={"bc-ad.example": 3}))  # 3 + 3 >= 5
+    write_report(report, settings)
+
+    result = RUNNER.invoke(app, ["summary", "--reports", str(tmp_path / "data" / "reports")])
+    get_settings.cache_clear()
+
+    assert result.exit_code == 0, result.output
+    learned = (tmp_path / "config" / "blacklist" / "bc_domains.learned.txt").read_text(
+        encoding="utf-8"
+    )
+    assert "bc-ad.example" in learned
+
+
+def test_summary_can_skip_learning(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A reporting command must be able to report without side effects."""
+    monkeypatch.setenv("HARVEST_ROOT", str(tmp_path))
+    settings = _root_with_blacklist(tmp_path)
+    get_settings.cache_clear()
+    write_report(_report_with_bc("bc-ad.example", hits=9), settings)
+
+    result = RUNNER.invoke(
+        app,
+        ["summary", "--reports", str(tmp_path / "data" / "reports"), "--no-learn-bc"],
+    )
+    get_settings.cache_clear()
+
+    assert result.exit_code == 0, result.output
+    assert not (tmp_path / "config" / "blacklist" / "bc_domains.learned.txt").exists()
+
+
+def test_the_commit_step_stages_the_learned_blacklist() -> None:
+    """The learning above only counts if it is committed.
+
+    The commit step staged `data sites`; `config` was missing, so every run's learning was
+    discarded at the end. Nothing noticed, because the learned file is only ever created when a
+    host is hit repeatedly -- which is rare, and was rarer still while the learning crashed.
+    """
+    workflow = (
+        Path(__file__).resolve().parents[1] / ".github" / "workflows" / "_collect.yml"
+    ).read_text(encoding="utf-8")
+    steps = [ln for ln in workflow.splitlines() if ln.strip().startswith("git add ")]
+
+    assert steps, "no staging step found"
+    for line in steps:
+        assert "config" in line, (
+            f"the commit step does not stage `config`, so config/blacklist/bc_domains.learned.txt "
+            f"(written by `summary`) is never persisted: {line.strip()}"
+        )

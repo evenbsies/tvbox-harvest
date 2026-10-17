@@ -289,7 +289,11 @@ jobs:
           set -euo pipefail
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data sites
+          # `config` is here for one file: config/blacklist/bc_domains.learned.txt, which the
+          # `summary` step writes when a gambling host has been hit repeatedly. Without it in the
+          # commit, automatic BC host learning ran on every harvest and persisted nothing -- the
+          # blacklist could only ever change by hand, which is the opposite of what it is for.
+          git add data sites config
           if git diff --cached --quiet; then
             echo "no changes to commit"
             exit 0

@@ -715,6 +715,11 @@ def summary(
     markdown: str = typer.Option("", "--markdown", help="Write the combined report here"),
     comment: str = typer.Option("", "--comment", help="Write the Issue comment body here"),
     subscribe_url: str = typer.Option("", "--subscribe-url", help="Subscription URL for the comment"),
+    learn_bc: bool = typer.Option(
+        True,
+        "--learn-bc/--no-learn-bc",
+        help="Promote repeatedly-hit gambling hosts into the learned blacklist",
+    ),
 ) -> None:
     """Combine one run's per-site reports into a single report and summary line.
 
@@ -722,6 +727,12 @@ def summary(
     files. Both the run summary and the Issue comment used to read `data/reports/*.json` inline
     in shell -- and both were consequently empty, because the report files were never uploaded as
     artifacts to begin with. This command makes the combination explicit, and testable.
+
+    This is also where BC host learning belongs in CI. `run_pipeline` learns hosts too, but it
+    runs inside each collect job, whose workspace is discarded -- and N parallel jobs writing
+    `config/blacklist/bc_domains.learned.txt` would collide when their artifacts merge. Here every
+    site's `bc_hits` has already been collected into one place, there is exactly one writer, and
+    the commit step that follows stages `config`, so the learning actually survives.
     """
     settings = get_settings()
     reports_dir = Path(reports) if reports else settings.reports_dir
@@ -737,6 +748,22 @@ def summary(
     combined = combine(runs)
     data = combined.as_dict()
     totals = data["summary"]
+
+    if learn_bc:
+        # Aggregate every site's BC hits and promote the repeat offenders. Summed across sites,
+        # because the threshold is about a host being advertised *somewhere* repeatedly, and no
+        # single site needs to trip it alone.
+        from collections import Counter
+
+        from harvest.clean.gambling import learn_from_hosts
+
+        hits: Counter[str] = Counter()
+        for site in combined.sites:
+            for host, count in site.bc_hits.items():
+                hits[host] += count
+        added = learn_from_hosts(hits, threshold=5) if hits else []
+        if added:
+            console.print(f"[yellow]learned {len(added)} BC host(s): {', '.join(added)}[/yellow]")
 
     summary_path, md_path = combined_paths(settings, combined.started_at)
     reports_dir.mkdir(parents=True, exist_ok=True)
