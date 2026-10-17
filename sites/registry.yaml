@@ -34,13 +34,18 @@ sites:
     lines: 3
     filtered: 0
 - key: validation-lziapi
-  name: validation-lziapi
+  name: 采集接口验证站
   base_url: https://cj.lziapi.com
-  adapter: auto
-  tier: 0
+  adapter: maccms_v10
+  tier: 1
   enabled: true
   origin:
     type: issue
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
-  last_run: {}
+  last_run:
+    at: '2026-10-17T02:19:51+00:00'
+    status: ok
+    vods: 298
+    lines: 596
+    filtered: 8
