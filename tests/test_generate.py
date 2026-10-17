@@ -358,3 +358,33 @@ class TestGamblingHostsNeverReachOutput:
         write_snapshot(site, result.site_data, settings=settings)
         blob = json.dumps(load_snapshot("t1", settings), ensure_ascii=False)
         assert "kaiyun-888.bc.example.com" not in blob
+
+
+def test_a_disabled_site_is_never_published_even_with_data(tmp_path):
+    """`enabled: false` must remove a site even when its harvested data is still on disk.
+
+    `generate --all` reads every normalized file, so a site switched off in its recipe kept
+    appearing in the subscription until its data was deleted by hand. That is the opposite of
+    what the flag is documented to do, and it is how a source we had just judged unsuitable
+    (82% of its rows filtered as adult) would have stayed published.
+    """
+    from harvest.config import Settings
+
+    settings = Settings(root=tmp_path)
+    settings.ensure_dirs()
+    live = demo_site("maccms_v10", "keep")
+    off = demo_site("maccms_v10", "drop")
+    off.enabled = False
+
+    generated = tvbox_mod.generate_all(
+        [(live, demo_data(live)), (off, demo_data(off))],
+        settings=settings,
+        flavors=("direct",),
+    )
+
+    config = json.loads((settings.tvbox_dir / "index.direct.json").read_text("utf-8"))
+    assert [s["key"] for s in config["sites"]] == ["keep"]
+    assert {"key": "drop", "reason": "disabled"} in config["_skipped"]
+    assert generated[0].site_keys == ["keep"]
+
+

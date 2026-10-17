@@ -1,0 +1,81 @@
+# Tier-1 recipe: 非凡影视 (ffzy5.tv) 的公开苹果CMS V10 采集接口。
+#
+# 为什么要加这个源：原来只有 聚合影视接口 + 洛雪 + 追影 三个，内容面太窄。这是同一类公开
+# 采集接口，分类表是常规的 电影/电视剧/综艺/动漫 + 类型细分（31 项），分类表 31 项，其中含「伦理片」——见文件末尾的说明。
+#
+# 实测（2026-10-17）：
+#   * total=98612，pagecount=4931，每页 20 条，`?ac=list` 与 `?ac=videolist` 都正常。
+#   * 列表项**不带** `vod_play_url`（实测本页 20 条全为空），剧集要走 `ac=detail&ids=`。
+#     适配器按 20 个 id 一批请求（maccms_v10.DETAIL_BATCH），所以成本是「页数 + 批数」，
+#     不是「条数」——2000 部大约 100 页列表 + 100 次批量详情。
+#
+# 启用条件（两处都要改，`_harvest_enabled` 要求一致）：本文件的 `enabled` 与
+# sites/registry.yaml 里同 key 的 `enabled`。
+
+
+# 合规说明（2026-10-17 实测后补写）：
+#
+# 该站分类表里有「伦理」/「伦理片」分类。这不是我们能改的，但它与订阅的关系要写清楚：
+#   * 本仓的 bc_filter 只作用于**本地快照**（data/snapshot/）。
+#   * T1 条目是**直连**：订阅里给的是对方站的 api.php，播放器直接请求它，我们的过滤不生效。
+#   * 也就是说，订阅用户能看到「伦理片」分类，因为它来自对方站，不来自本仓。
+# 若要过滤真正生效，把这个站改为走网关（配方加 probe.gateway），代价是目录从对方的完整
+# 体量缩到本地快照量，且网关每次请求要加载全部分片。取舍记录在此，不默认替使用者决定。
+
+key: ffzy
+name: 非凡影视
+base_url: https://ffzy5.tv
+adapter: maccms_v10
+enabled: true
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Public collection endpoint, same class as 聚合影视接口. Its catalogue is third-party
+    aggregated content; enabled with the operator's knowledge. Disable by setting
+    `enabled: false` here and in sites/registry.yaml, then re-running generate.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0
+      Safari/537.36"
+    Referer: "{base_url}/"
+  rate_limit: 1.0
+  timeout: 20
+  retries: 3
+  respect_robots: true
+  delay_jitter: 0.3
+
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  # 站点有 4931 页；先取前 100 页（约 2000 部），跑得完、也够撑起一个源的体量。
+  max_pages: 100
+  incremental_hours: 24
+  page_limit: 20
+
+budget:
+  # 全局默认 300 是给未知站点留的安全值，对一个能稳定翻 100 页的 T1 源太小了：
+  # 300 部 vs 7 万部的总目录，用户会觉得"这个源没东西"。
+  max_titles_per_run: 2000
+  max_requests_per_site: 400
+
+tvbox:
+  searchable: 1
+  quickSearch: 1
+  filterable: 1
+  playerType: 2
+
+detect:
+  version: 1
+  result: maccms_v10
+  tier: 1
+  status: ok
+  stale: false
+  evidence:
+    notes:
+      - 'Hand-written from a live probe on 2026-10-17: total=98612, pagecount=4931, 31 classes.'
+browser: {}
+selectors: {}
+probe: {}

@@ -266,6 +266,15 @@ def generate_all(
     tvbox_dir = settings.tvbox_dir
     out: list[GeneratedConfig] = []
 
+    # A disabled site must never be published, even when its harvested data is still sitting on
+    # disk. `generate --all` reads every normalized file, so without this a site whose recipe was
+    # switched off kept appearing in the subscription until someone deleted its data by hand --
+    # the opposite of what `enabled: false` is documented to do. Callers that need to inspect a
+    # disabled site can flip the recipe's flag for that run.
+    published = [(site, data) for site, data in pairs if site.enabled]
+    dropped_disabled = [site.key for site, _ in pairs if not site.enabled]
+    pairs = published
+
     def gateway_for(site: SiteConfig) -> str:
         return _gateway_for(site, gateway_base)
 
@@ -385,6 +394,10 @@ def generate_all(
             flavor=flavor,
             parses=parses,
         )
+        if dropped_disabled:
+            # Reported, not silent: a site vanishing from the subscription should be traceable to
+            # the recipe flag that removed it.
+            skipped.extend({"key": key, "reason": "disabled"} for key in dropped_disabled)
         if skipped:
             config["_skipped"] = skipped
         if carried:

@@ -41,7 +41,8 @@ sites:
   enabled: false
   origin:
     type: manual
-    note: Tier-3 validation; collection API returns `closed`, play lines are tab-labelled
+    note: Tier-3 validation; collection API returns `closed`, play lines are 
+      tab-labelled
   last_run:
     at: '2026-10-17T04:24:10+00:00'
     status: ok
@@ -56,8 +57,8 @@ sites:
   enabled: true
   origin:
     type: manual
-    note: Tier-4 validation with an anchor-based episode list; 1080p measured from
-      SPS
+    note: Tier-4 validation with an anchor-based episode list; 1080p measured 
+      from SPS
   last_run:
     at: '2026-10-17T03:19:00+00:00'
     status: degraded
@@ -125,3 +126,33 @@ sites:
     vods: 1916
     lines: 3832
     filtered: 97
+- key: ffzy
+  name: 非凡影视
+  base_url: https://ffzy5.tv
+  adapter: maccms_v10
+  tier: 1
+  enabled: true
+  origin:
+    type: manual
+    note: LibreTV 老版默认源；total≈9.9 万；含伦理片分类（直连不过滤）
+  last_run:
+    at: '2026-10-17T12:00:30+00:00'
+    status: ok
+    vods: 1967
+    lines: 3934
+    filtered: 37
+- key: zy360
+  name: 360资源
+  base_url: https://360zy.com
+  adapter: maccms_v10
+  tier: 1
+  enabled: false
+  origin:
+    type: manual
+    note: 已禁用：2000 条中 1655 条被成人过滤（82%），目录以成人内容为主
+  last_run:
+    at: '2026-10-17T12:03:59+00:00'
+    status: ok
+    vods: 346
+    lines: 346
+    filtered: 1655
