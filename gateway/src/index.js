@@ -50,13 +50,30 @@ function snapshotBase(env) {
 }
 
 /**
- * Where the generated TVBox configs live. Derived from SNAPSHOT_BASE rather than REPO, so a
- * mirror (S3, R2, a local directory during `wrangler dev`) serves *everything* -- the index
- * route used to be hard-wired to jsDelivr and returned 500 whenever SNAPSHOT_BASE was overridden.
+ * Where the generated TVBox configs live.
+ *
+ * Three cases, in order:
+ *
+ *   1. `CONFIG_BASE` set explicitly -- wins, no questions asked.
+ *   2. `SNAPSHOT_BASE` set -- a mirror (`wrangler dev`, S3, R2) is serving both trees, so derive
+ *      the config base from it. This is what makes local verification possible at all; the
+ *      index route used to be hard-wired to jsDelivr and returned 500 whenever SNAPSHOT_BASE was
+ *      overridden.
+ *   3. Production default: **raw.githubusercontent.com, not jsDelivr**.
+ *
+ * The third case is not an accident. jsDelivr resolves a *branch* ref to a commit and caches
+ * that resolution for up to 12 hours, per edge. Measured after a push: `cdn` and `testingcf`
+ * served the new config while `fastly` and `gcore` served the previous one, and a purge did not
+ * make a later fetch on `cdn` return the new file either. For a subscription that must reflect
+ * the last harvest, "usually fresh" is the failure mode that matters -- a stale config silently
+ * advertises the previous site list while `/vod/*` already serves the new data. raw.github
+ * has no branch-resolution cache: a push is visible in minutes.
  */
 function configBase(env) {
-  const base = snapshotBase(env);
-  return base.replace(/\/snapshot$/, "") + "/tvbox";
+  if (env.CONFIG_BASE) return env.CONFIG_BASE.replace(/\/+$/, "");
+  if (env.SNAPSHOT_BASE) return env.SNAPSHOT_BASE.replace(/\/snapshot$/, "") + "/tvbox";
+  if (!env.REPO) throw new Error("REPO binding is required");
+  return `https://raw.githubusercontent.com/${env.REPO}/main/data/tvbox`;
 }
 
 async function fetchJson(url, ttl) {
@@ -228,7 +245,12 @@ async function handleVod(url, env, key) {
  */
 async function handleConfig(env, file) {
   if (!env.REPO) return json({ error: "REPO binding is not set" }, 500);
-  const ttl = Number(env.CACHE_TTL || DEFAULT_TTL);
+  // Deliberately much shorter than CACHE_TTL. The config is ~1.4 KB and is fetched a handful of
+  // times per subscriber per day, so caching it for ten minutes buys nothing -- while it does
+  // mean that right after a harvest the config can still advertise the previous site list while
+  // `/vod/*` already serves the new data. That mismatch is what a brand-new subscriber sees
+  // first, and it reads as "the source disappeared".
+  const ttl = Math.min(Number(env.CACHE_TTL || DEFAULT_TTL), 60);
   return json(await fetchJson(`${configBase(env)}/${file}`, ttl));
 }
 
