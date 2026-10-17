@@ -283,6 +283,15 @@ def generate(
             "entries[/yellow]"
         )
 
+    # Parse routes are configuration, not harvested data, so a rebuild has to fetch them too.
+    # Without this, `harvest generate` silently dropped every `parses` entry the pipeline had
+    # put there -- the run that produced it was fine, and the manual rebuild after it was not.
+    from harvest.generate.parses import collect_parses
+
+    parse_result = asyncio.run(collect_parses(settings))
+    for note in parse_result.notes:
+        console.print(f"[dim]{note}[/dim]")
+
     generated = tvbox_mod.generate_all(
         pairs,
         settings=settings,
@@ -290,6 +299,7 @@ def generate(
         flavors=tuple(f.strip() for f in flavors.split(",") if f.strip()),
         run_id=run_id,
         carry_over=keep,
+        parses=parse_result.entries,
     )
     for item in generated:
         console.print(f"[green]{item.flavor}[/green] -> {item.path} ({item.site_count} sites)")
