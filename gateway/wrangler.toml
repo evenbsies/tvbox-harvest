@@ -16,7 +16,7 @@ compatibility_date = "2024-11-01"
 [vars]
 # REQUIRED. The repository holding the snapshots, as "owner/name".
 # jsDelivr's `/gh/` endpoint only serves public repositories.
-REPO = "CHANGE_ME/CHANGE_ME"
+REPO = "evenbsies/tvbox-harvest"
 
 # Optional. Defaults to https://cdn.jsdelivr.net/gh/<REPO>@main/data/snapshot
 # Override if you serve the snapshots yourself (S3, R2, a mirror, ...).

@@ -78,6 +78,53 @@ gh variable set HARVEST_GATEWAY --body "https://<your-worker>.workers.dev"
 
 ---
 
+## 不连外网也能验证（本地镜像）
+
+`wrangler dev --local` 里的 `fetch` **不走系统代理**。在这台机器上直接指着 jsDelivr 会得到
+`{"code":500,"msg":"Network connection lost."}` —— 那是本机网络的问题，不是 Worker 的问题。
+用本地镜像代替 CDN，就能把 Worker 本身测干净。
+
+1. 起一个**多线程**静态服务器，根目录是仓库的 `data/`：
+
+```python
+# save as serve_mirror.py, then: python serve_mirror.py
+import functools, http.server, socketserver
+
+class Handler(http.server.SimpleHTTPRequestHandler):
+    protocol_version = "HTTP/1.1"
+
+class Server(socketserver.ThreadingMixIn, http.server.HTTPServer):
+    daemon_threads = True
+
+Server(("127.0.0.1", 8899), functools.partial(Handler, directory="data")).serve_forever()
+```
+
+> 单线程的 `python -m http.server` 会被 Worker 的并发请求打断，报 `Network connection lost`。
+
+2. 把 `SNAPSHOT_BASE` 指向它，然后逐个路由验证：
+
+```bash
+cd gateway
+npx wrangler dev --local --port 8787 --var SNAPSHOT_BASE:http://127.0.0.1:8899/snapshot
+
+curl -s 127.0.0.1:8787/health
+curl -s "127.0.0.1:8787/vod/<key>?ac=class"
+curl -s "127.0.0.1:8787/vod/<key>?ac=list&limit=2"
+curl -s "127.0.0.1:8787/vod/<key>?ac=detail&ids=<vod_id>"
+curl -s "127.0.0.1:8787/vod/<key>?ac=list&wd=<关键词>"
+```
+
+本机实测（2026-10-17，`validation-lziapi`）：`ac=class` 44 个分类；`ac=list` 293 部 / 147 页；
+`ac=detail&ids=154717` 返回 `vod_play_from` 与 12 集 `vod_play_url`；`ac=list&wd=伦敦` 命中 1 部。
+
+### `SNAPSHOT_BASE` 决定一切
+
+`/` 与刷新路由曾经把 `data/tvbox/` 的地址写死成 jsDelivr，覆盖 `SNAPSHOT_BASE` 之后一访问 `/`
+就 500。现在配置地址由 `SNAPSHOT_BASE` 推导（去掉结尾 `/snapshot`、换成 `/tvbox`），所以自建镜像
+（S3 / R2 / 本地目录）能同时服务快照与配置。**这就是本地验证能成立的原因。**
+
+---
+
 ## 触发刷新
 
 ```bash

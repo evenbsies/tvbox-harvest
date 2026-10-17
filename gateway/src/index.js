@@ -49,6 +49,16 @@ function snapshotBase(env) {
   return `https://cdn.jsdelivr.net/gh/${env.REPO}@main/data/snapshot`;
 }
 
+/**
+ * Where the generated TVBox configs live. Derived from SNAPSHOT_BASE rather than REPO, so a
+ * mirror (S3, R2, a local directory during `wrangler dev`) serves *everything* -- the index
+ * route used to be hard-wired to jsDelivr and returned 500 whenever SNAPSHOT_BASE was overridden.
+ */
+function configBase(env) {
+  const base = snapshotBase(env);
+  return base.replace(/\/snapshot$/, "") + "/tvbox";
+}
+
 async function fetchJson(url, ttl) {
   const hit = cache.get(url);
   const now = Math.floor(Date.now() / 1000);
@@ -208,10 +218,9 @@ async function handleVod(url, env, key) {
 async function handleIndex(env) {
   if (!env.REPO) return json({ error: "REPO binding is not set" }, 500);
   const base = snapshotBase(env);
-  const resp = await fetch(
-    `https://cdn.jsdelivr.net/gh/${env.REPO}@main/data/tvbox/index.gateway.json`,
-    { cf: { cacheTtl: 300, cacheEverything: true } },
-  );
+  const resp = await fetch(`${configBase(env)}/index.gateway.json`, {
+    cf: { cacheTtl: 300, cacheEverything: true },
+  });
   const config = resp.ok ? await resp.json() : { sites: [] };
 
   const sites = [];
