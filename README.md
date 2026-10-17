@@ -346,6 +346,32 @@ lines:
 - 线路没有名字的站点（例如有些模板只给线路编号）**不算匹配**。对这类站跑 `--lines-keep 4K` 会得到 0 部，这是正确结果：无法证明它是 4K，就不假装它是。
 - 一条都不剩的片子会被**整条丢弃**而不是留个空壳，并在报告里记 `line_not_matched`，附带站上实际出现过的线路名——短多少、为什么短，都在报告里。
 
+### 第三种线路：解析线路（`parses`）
+
+有些站的「4K」不在采集线路里，而在**播放器**里。洛雪TV 就是例子：它对外公布 8 个采集源
+（`官采蓝光 / 4k60帧🔥 / 自营 …`）和 6 条解析线路（`默认解析 / 洛雪4K / TXNP / 闪电 …`），
+其中「4k60帧」指向的不是采集接口而是「母鸡播放器」（`https://mujizybf.com/m3u8/?url=`）。
+
+这类线路在 TVBox 里属于 `parses[]`，而不是 `sites[].lines`。按名字筛选写在 `config/parses.yaml`：
+
+```yaml
+parses:
+  - name: 洛雪TV
+    config: https://tv.lxyy.club/api/proxy.php?action=config
+    routes_key: official_routes
+    keep: ["4K"]          # 6 条里只留「洛雪4K」
+```
+
+实测输出（生成的 `index.json` 里）：
+
+```json
+{"name": "洛雪4K", "type": 1, "url": "https://tv.lxyy.club/json-player.php?route=official_musbpyqz&url=",
+ "ext": {"player_codes": ["qq", "bilibili", "rrmj", "hmdj"], "official_only": true}}
+```
+
+**这一条与「只索引」不同**：`parses` 意味着播放请求经过对方服务器。所以它按源显式开启，
+`keep` 不写就等于「不启用」，理由和边界写在 COMPLIANCE.md 第 1.1 节。单站订阅不带全局 `parses`。
+
 ---
 
 ## 仓库结构

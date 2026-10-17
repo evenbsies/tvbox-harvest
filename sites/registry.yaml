@@ -28,10 +28,10 @@ sites:
     type: manual
     note: Tier-3 validation; collection API returns `closed`, play lines are tab-labelled
   last_run:
-    at: '2026-10-17T03:48:00+00:00'
+    at: '2026-10-17T04:24:10+00:00'
     status: ok
-    vods: 3
-    lines: 3
+    vods: 1
+    lines: 1
     filtered: 0
 - key: zhuiying
   name: 追影

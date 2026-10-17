@@ -24,6 +24,7 @@ from harvest.config import Settings, get_settings
 from harvest.fetch.http import CircuitOpen, HttpClient, RawRecorder
 from harvest.generate import snapshot as snapshot_mod
 from harvest.generate import tvbox as tvbox_mod
+from harvest.generate.parses import collect_parses
 from harvest.generate.report import RunReport, SiteReport, write_report
 from harvest.generate.verify import VerifyResult, verify_entry
 from harvest.models import ProbeResult, Registry, RegistryEntry, SiteConfig, SiteData, utcnow_iso
@@ -595,6 +596,15 @@ async def run_pipeline(options: RunOptions, settings: Settings | None = None) ->
             report.learned_bc_hosts = learn_from_hosts(Counter(bc_host_counts), threshold=5)
 
         if not options.dry_run:
+            # Parse routes are a separate axis from sites: they belong to a player, not to a
+            # catalogue. Fetched here, right before rendering, because they are configuration
+            # rather than harvested data -- and because a failure must not sink the run.
+            parse_entries: list[dict] = []
+            # `collect_parses` returns [] when config/parses.yaml is absent, so this costs
+            # nothing for sites that do not use parse routes at all.
+            parse_result = await collect_parses(settings, http)
+            parse_entries = parse_result.entries
+            report.notes.extend(parse_result.notes)
             # Carry forward enabled sites this run has no data for, exactly as the standalone
             # `generate` command does. Without it, `harvest collect` locally would overwrite
             # data/tvbox/index.json with a config listing only the sites it just harvested.
@@ -609,6 +619,7 @@ async def run_pipeline(options: RunOptions, settings: Settings | None = None) ->
                 flavors=tuple(options.flavors),
                 run_id=options.run_id,
                 carry_over=carry,
+                parses=parse_entries,
             )
             for item in generated:
                 report.generated.append(

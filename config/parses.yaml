@@ -1,0 +1,25 @@
+# 解析线路（TVBox 的 parses）
+#
+# 这里不是站点，是**播放器**。采集线路属于某个站（`sites[].lines`），解析线路属于一个播放器：
+# 你把页面地址交给它，它把流交回来。洛雪TV 把它叫 `official_routes`，页面上叫「默认解析 /
+# 闪电 / 洛雪4K」；片库那类模板把同一件事叫「播放器」。
+#
+# ⚠️ 与「只索引」不同：写进这一段的条目，会让客户端的播放请求经过对方服务器。
+# 所以它按源逐个开启，默认留空；也所以 `keep` 是必填的，不写就等于「把对方所有解析都搬过来」。
+#
+# 字段：
+#   config      返回线路清单的地址（站点页面自己就会请求它）
+#   routes_key  JSON 里存放线路数组的键，默认 official_routes
+#   url_field   线路对象里存播放地址模板的字段名，默认 api
+#   keep/drop   按线路**名字**过滤，正则、大小写不敏感
+#   type_map    iframe/web→0（普通页解析）、json/json_api→1（JSON 解析）
+#
+# 只保留 4K 的写法：
+parses:
+  - name: 洛雪TV
+    config: https://tv.lxyy.club/api/proxy.php?action=config
+    routes_key: official_routes
+    url_field: api
+    keep: ["4K"]
+    # 站上共 6 条：默认解析 / 洛雪4K / TXNP / 闪电 / m1907 / 备用
+    # keep: ["4K"] 只会留下「洛雪4K」（type=json → TVBox type 1）

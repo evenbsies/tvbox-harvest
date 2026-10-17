@@ -142,12 +142,19 @@ def build_config(
     run_id: str = "",
     gateway_base: str = "",
     flavor: str = "direct",
+    parses: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     top = dict(defaults.get("top_level") or {})
+    # Pop unconditionally: `config.update(top)` below would otherwise put the defaults' empty
+    # `parses: []` back over whatever was passed in, and the discovered routes would vanish
+    # silently while the run reported them as kept.
+    default_parses = top.pop("parses", [])
     config: dict[str, Any] = {
         "sites": entries,
         "lives": top.pop("lives", []),
-        "parses": top.pop("parses", []),
+        # `parses` come from config/parses.yaml (解析线路), filtered by name there. Anything
+        # declared in the defaults file is used only when nothing was passed in.
+        "parses": list(parses if parses is not None else default_parses),
         "flags": top.pop("flags", []),
         "rules": top.pop("rules", []),
     }
@@ -193,6 +200,7 @@ def generate_all(
     flavors: tuple[str, ...] = FLAVORS,
     run_id: str = "",
     carry_over: Collection[str] = (),
+    parses: list[dict[str, Any]] | None = None,
 ) -> list[GeneratedConfig]:
     """Render every requested flavour from one set of normalized site data.
 
@@ -217,6 +225,9 @@ def generate_all(
         single = build_config(
             entries=[entry], defaults=defaults, run_id=run_id, gateway_base=gateway_base,
             flavor="site",
+            # Deliberately empty: a single-site subscription must not drag in parse routes that
+            # belong to a different site. Those live in the full configs below.
+            parses=[],
         )
         write_config(single, tvbox_dir / "sites" / f"{site.key}.json")
 
@@ -278,6 +289,7 @@ def generate_all(
         config = build_config(
             entries=entries, defaults=defaults, run_id=run_id, gateway_base=gateway_base,
             flavor=flavor,
+            parses=parses,
         )
         if skipped:
             config["_skipped"] = skipped
