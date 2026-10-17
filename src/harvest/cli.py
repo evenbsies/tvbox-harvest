@@ -135,6 +135,11 @@ def collect(
     since_hours: int | None = typer.Option(None, "--since-hours"),
     max_titles: int | None = typer.Option(None, "--max-titles"),
     max_requests: int | None = typer.Option(None, "--max-requests"),
+    max_episodes: int = typer.Option(
+        0,
+        "--max-episodes",
+        help="Override the Tier-4 per-run episode ceiling (0 = use the recipe's budget)",
+    ),
     gateway: str = typer.Option("", "--gateway", help="Gateway base URL for bridged sites"),
     flavors: str = typer.Option(",".join(tvbox_mod.FLAVORS), "--flavors"),
     reprobe: bool = typer.Option(False, "--reprobe"),
@@ -155,6 +160,7 @@ def collect(
         since_hours=since_hours,
         max_titles=max_titles,
         max_requests=max_requests,
+        max_episodes=max_episodes or None,
         gateway_base=gateway,
         flavors=tuple(f.strip() for f in flavors.split(",") if f.strip()),
         reprobe=reprobe,
@@ -818,6 +824,8 @@ def scorecard(
     )
     for message in card.errors:
         console.print(f"  [yellow]{message}[/yellow]")
+    for message in card.notes:
+        console.print(f"  [cyan]{message}[/cyan]")
 
     for dimension in card.dimensions:
         table = Table(title=dimension.name, show_header=True, header_style="bold")

@@ -18,6 +18,21 @@ sites:
   origin:
     type: template
   last_run: {}
+- key: zhuiying
+  name: 追影
+  base_url: https://zhuiying3.cc
+  adapter: playwright_sniff
+  tier: 4
+  enabled: false
+  origin:
+    type: manual
+    note: Tier-4 validation with an anchor-based episode list; 1080p measured from SPS
+  last_run:
+    at: '2026-10-17T03:19:00+00:00'
+    status: degraded
+    vods: 1
+    lines: 1
+    filtered: 0
 - key: 4kvm
   name: 4KVM
   base_url: https://www.4kvm.tv

@@ -304,6 +304,18 @@ python -m harvest.cli scorecard https://example.com/ --sample 60 --streams 5
 
 一个实测例子（对已收录站点的抽样）：`HD` 这两个字出现在 298 条里的 289 条备注中——只认「1080/4K/蓝光」的正则会把它全部算作「无高清」，于是报出一个自信但错误的 0.0。所以画质被拆成「自述分辨率」与「泛 HD 标签」两组，且另有清单实测兜底。
 
+### 「4K」到底怎么证伪
+
+标签不可信是常态：`claims_generic_hd_ratio` 可以到 0.85 而 `claims_resolution` 是 0。清单也常常帮不上忙——大量站点给的是**媒体列表**（直接列 `.ts` 分片），根本没有 `RESOLUTION=`。这种情况下 `--streams` 会退一步去读流本身：
+
+1. 取媒体列表里第一个 `.ts` 分片（`Range: bytes=0-524287`，一次请求）；
+2. 在 Annex-B 里找 H.264 的 SPS（NAL type 7）；
+3. 解析 `pic_width_in_mbs` / `pic_height_in_map_units` 与 `frame_cropping`，得到真实像素尺寸。
+
+结果落在 `streams_measured_by_sps`、`sps_resolutions`，以及 **`measured_is_4k`**（阈值 3800×2100）。这条路径给出的是编码器自己写的数字，不是页面上的词。局限写死在 `probe/h264.py` 的文档里：只解 Annex-B（HLS/FLV），`.mp4` 的 `avcC` 与 HEVC 不处理，读不到就返回 `None`——**`None` 永远不等于「不是 4K」**。
+
+实测：某站标题自称「蓝光高清」，SPS 读出来是 `1920x1080`；同一站点的 `claims_resolution` 为 0。两个数字都对，只是回答的不是同一个问题。
+
 ---
 
 ## 仓库结构

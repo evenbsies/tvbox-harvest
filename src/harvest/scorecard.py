@@ -87,6 +87,7 @@ class Scorecard:
     collect_ms: int = 0
     dimensions: list[Dimension] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
 
     def dim(self, name: str) -> Dimension:
         for dimension in self.dimensions:
@@ -106,6 +107,7 @@ class Scorecard:
             "collect_ms": self.collect_ms,
             "dimensions": {d.name: d.values for d in self.dimensions},
             "errors": self.errors,
+            "notes": self.notes,
         }
 
 
@@ -136,7 +138,7 @@ async def score(
         raise ValueError(url_or_error)
 
     base = normalize_base_url(url_or_error)
-    site = SiteConfig(
+    site = _recipe_for_host(base, settings) or SiteConfig(
         key="scorecard",
         name="scorecard",
         base_url=base,
@@ -146,6 +148,12 @@ async def score(
     )
     card = Scorecard(url=url_or_error, base_url=base)
     streams_checked = streams
+
+    # A recipe that names its adapter is a human decision, and it usually carries knowledge the
+    # probe cannot rediscover -- the selector that opens the player, the failover hosts. Probing
+    # is therefore informational for such a site, not a gate: aborting when the probe comes back
+    # inconclusive would report "unusable" for a site whose recipe demonstrably works.
+    pinned_adapter = site.adapter != "auto"
 
     async with HttpClient(settings) as http:
         started = time.monotonic()
@@ -168,7 +176,11 @@ async def score(
             )
         )
 
-        if probe.status == "unknown":
+        if probe.status == "unknown" and pinned_adapter:
+            card.notes.append(
+                f"探测未完成（{card.probe_ms} ms），但配方已显式指定 {site.adapter}，按配方继续测量"
+            )
+        elif probe.status == "unknown":
             # "unknown" means the probe did not complete -- no response, a timeout, a block. That
             # is a failed *measurement*, not a property of the site: reporting tier 0 / "not
             # automatable" here would read as "this source is unusable", which is a different and
@@ -180,12 +192,15 @@ async def score(
             )
             return card
 
-        if not probe.automatable:
+        if not probe.automatable and not pinned_adapter:
             card.errors.append(f"not automatable (tier={probe.tier}, status={probe.status})")
             return card
 
-        # `run_collect` needs a concrete adapter; detection only decided which one it is.
-        site = apply_probe_patch(site, probe)
+        # `run_collect` needs a concrete adapter; detection only decided which one it is. When the
+        # recipe already pins one and the probe came back empty-handed, patching would replace the
+        # pin with `auto` and the collect would fail for the reason the pin exists to avoid.
+        if not (pinned_adapter and probe.status == "unknown"):
+            site = apply_probe_patch(site, probe)
 
         # The site-level advertising scan needs one page of HTML. Fetched once, from the home page.
         try:
@@ -274,13 +289,17 @@ async def score(
                 "claims_generic_hd_ratio": _ratio(claims_generic, kept.vod_count),
                 "streams_checked": streams["checked"],
                 "streams_with_resolution": streams["with_resolution"],
+                "streams_measured_by_sps": streams["measured_by_sps"],
                 "max_resolution": streams["max_resolution"],
                 "resolutions_seen": streams["seen"],
+                "sps_resolutions": streams["sps"],
+                "measured_is_4k": streams["is_4k"],
             },
             note=(
-                "claims_* 是站点自述，不可验证；streams_* 是实际读 m3u8 主播放列表的 "
-                "RESOLUTION=，只有这一组是量出来的。max_resolution 为空表示抽样到的清单里"
-                "没有声明分辨率（多为媒体列表而非主列表），不等于不高清"
+                "claims_* 是站点自述，不可验证。streams_* 里两组都是量出来的："
+                "with_resolution 读主播放列表的 RESOLUTION=；measured_by_sps 是在媒体列表"
+                "（不声明分辨率）时，从第一个 TS 分片解 H.264 SPS 得到的真实像素尺寸。"
+                "max_resolution / measured_is_4k 为空表示这一轮没量到，不等于不高清"
             ),
         )
     )
@@ -336,13 +355,21 @@ async def score(
 async def _check_streams(
     data: Any, http: HttpClient, site: SiteConfig, *, limit: int
 ) -> dict[str, Any]:
-    """Read a handful of HLS master playlists and report the resolutions they declare.
+    """Read a handful of HLS playlists and report the picture sizes that can be measured.
 
     Bounded and spread across titles: the point is a sample of *distinct* streams, not depth on
     one. Media playlists legitimately carry no `RESOLUTION`, so a low `with_resolution` count is
     "not measurable this way", not "low quality" -- the caller's note says so.
     """
-    out: dict[str, Any] = {"checked": 0, "with_resolution": 0, "max_resolution": None, "seen": {}}
+    out: dict[str, Any] = {
+        "checked": 0,
+        "with_resolution": 0,
+        "max_resolution": None,
+        "seen": {},
+        "measured_by_sps": 0,
+        "sps": {},
+        "is_4k": None,
+    }
     if limit <= 0 or not data.vods:
         return out
 
@@ -365,7 +392,9 @@ async def _check_streams(
     candidates = list(dict.fromkeys(candidates))[:limit]
 
     seen: dict[str, int] = {}
+    sps_seen: dict[str, int] = {}
     best: tuple[int, int] | None = None
+    best_info = None
     for url in candidates:
         out["checked"] += 1
         try:
@@ -373,18 +402,59 @@ async def _check_streams(
         except Exception:
             continue
         matches = _HLS_RESOLUTION.findall(resp.text[:200_000])
-        if not matches:
+        if matches:
+            width, height = max((int(w), int(h)) for w, h in matches)
+            out["with_resolution"] += 1
+            key = f"{width}x{height}"
+            seen[key] = seen.get(key, 0) + 1
+            if best is None or (width, height) > best:
+                best = (width, height)
             continue
-        width, height = max((int(w), int(h)) for w, h in matches)
-        out["with_resolution"] += 1
-        key = f"{width}x{height}"
-        seen[key] = seen.get(key, 0) + 1
-        if best is None or (width, height) > best:
-            best = (width, height)
+        # A media playlist declares nothing, so the master-playlist route is closed. Read the
+        # SPS out of the first segment instead -- that is the encoder's own word, and it is the
+        # only way to answer "is this really 4K" for the majority of these hosts.
+        info = await _resolution_from_segment(resp.text, url, http, site)
+        if info is None:
+            continue
+        out["measured_by_sps"] += 1
+        sps_seen[info.label] = sps_seen.get(info.label, 0) + 1
+        if best_info is None or (info.width, info.height) > (best_info.width, best_info.height):
+            best_info = info
 
     out["seen"] = seen
+    out["sps"] = sps_seen
+    if best is None and best_info is not None:
+        best = (best_info.width, best_info.height)
     out["max_resolution"] = f"{best[0]}x{best[1]}" if best else None
+    out["is_4k"] = None if best is None else (best[0] >= 3800 or best[1] >= 2100)
     return out
+
+
+async def _resolution_from_segment(text: str, playlist_url: str, http: HttpClient, site: SiteConfig):
+    """First TS segment of a media playlist -> its real resolution (or None)."""
+    from urllib.parse import urljoin
+
+    from harvest.probe.h264 import resolution_from_ts
+
+    segment = None
+    for line in text.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        if ".ts" in candidate or ".flv" in candidate:
+            segment = urljoin(playlist_url, candidate)
+            break
+    if not segment:
+        return None
+    try:
+        # The SPS sits at the head of the segment; 512 KB is far more than needed and keeps
+        # this cheap even on a slow CDN.
+        resp = await http.get(
+            segment, site=site, key="scorecard", headers={"Range": "bytes=0-524287"}
+        )
+    except Exception:
+        return None
+    return resolution_from_ts(resp.content or b"")
 
 
 def _recent_fraction(data: Any, *, days: int) -> float | None:
@@ -407,3 +477,39 @@ def _recent_fraction(data: Any, *, days: int) -> float | None:
         if stamp >= cutoff:
             recent += 1
     return _ratio(recent, len(dated))
+
+
+def _recipe_for_host(base_url: str, settings: Settings) -> SiteConfig | None:
+    """Reuse the checked-in recipe when this host already has one.
+
+    A recipe carries knowledge a probe cannot rediscover on its own -- most importantly the
+    selector that opens the player on a Tier-4 site. Measuring a site while ignoring the recipe
+    that was written for it would report "no media URL" for a source that demonstrably has one.
+    Nothing is written back: the recipe is read, never modified.
+    """
+    from urllib.parse import urlparse
+
+    from harvest.pipeline import load_recipe, load_registry
+
+    host = urlparse(base_url).netloc.lower()
+    if not host or not settings.sites_dir.exists():
+        return None
+    registry = load_registry(settings)
+    for path in sorted(settings.sites_dir.glob("*.yaml")):
+        if path.stem == "registry":
+            continue
+        ledger = registry.find(path.stem)
+        # Templates exist to be copied, not applied: they carry a placeholder host and a
+        # pretend adapter. Matching one by host would quietly measure `example.com` as if it
+        # were a Tier-3 site. `origin` is a free-form mapping in the ledger, so read both shapes.
+        origin = getattr(ledger, "origin", None) if ledger is not None else None
+        origin_kind = origin.get("type") if isinstance(origin, dict) else getattr(origin, "type", None)
+        if str(origin_kind or "") == "template":
+            continue
+        recipe = load_recipe(path.stem, settings)
+        if recipe is None:
+            continue
+        other = urlparse(recipe.base_url).netloc.lower()
+        if other == host or other.endswith("." + host) or host.endswith("." + other):
+            return recipe
+    return None

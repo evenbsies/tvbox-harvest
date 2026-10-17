@@ -19,9 +19,30 @@ Design notes:
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 from dataclasses import dataclass, field
 from typing import Any
+
+#: Env vars Playwright does *not* read on its own, in the order curl/httpx would prefer them.
+PROXY_ENV_VARS = ("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy")
+
+
+def resolve_proxy(explicit: str | None = None) -> str | None:
+    """Pick the proxy the browser should use, mirroring what the HTTP client already does.
+
+    httpx reads ``HTTPS_PROXY`` & friends by itself; Chromium does not. Without this, a
+    recipe that declares ``proxy:`` -- or a machine where every outbound request needs one --
+    produces a split brain: the HTTP requests succeed and every Tier-4 probe dies with
+    ``net::ERR_TIMED_OUT``, which then reads as "the site is unreachable" in the report.
+    """
+    if explicit:
+        return explicit
+    for name in PROXY_ENV_VARS:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value
+    return None
 
 MEDIA_CONTENT_TYPES = (
     "application/vnd.apple.mpegurl",
@@ -125,11 +146,15 @@ class BrowserSniffer:
         # XHR, but some players let the <video> element request it directly -- blocking media
         # would hide exactly the response we came for.
         block_resource_types: tuple[str, ...] = ("image", "font", "stylesheet"),
+        proxy: str | None = None,
     ) -> None:
         self.headless = headless
         self.user_agent = user_agent
         self.locale = locale
         self.block_resource_types = block_resource_types
+        # Resolved once here so a run cannot use one proxy for HTTP and no proxy for the
+        # browser. Pass the recipe's ``proxy`` in; fall back to the environment's.
+        self.proxy = resolve_proxy(proxy)
         self._pw = None
         self._browser = None
 
@@ -137,10 +162,13 @@ class BrowserSniffer:
         from playwright.async_api import async_playwright
 
         self._pw = await async_playwright().start()
-        self._browser = await self._pw.chromium.launch(
-            headless=self.headless,
-            args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
-        )
+        launch_kwargs: dict[str, Any] = {
+            "headless": self.headless,
+            "args": ["--no-sandbox", "--disable-dev-shm-usage", "--disable-blink-features=AutomationControlled"],
+        }
+        if self.proxy:
+            launch_kwargs["proxy"] = {"server": self.proxy}
+        self._browser = await self._pw.chromium.launch(**launch_kwargs)
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -297,9 +325,11 @@ class BrowserSniffer:
         matched: list[SniffedResponse], patterns: list[re.Pattern[str]], seed: list[str] | None = None
     ) -> list[str]:
         urls: list[str] = []
+        playlist_urls: list[str] = []
         for item in seed or []:
             if item not in urls:
                 urls.append(item)
+                playlist_urls.append(item)
         for item in matched:
             if item.status >= 400:
                 continue
@@ -307,7 +337,13 @@ class BrowserSniffer:
             is_media_url = any(p.search(item.url) for p in patterns)
             if (is_media_ct or is_media_url) and item.url not in urls:
                 urls.append(item.url)
-        return urls
+                if is_media_url:
+                    playlist_urls.append(item.url)
+        # A segment is not an address. When the player fetches `.../0000002.ts` as well as the
+        # playlist, the segment matches on content-type alone -- and handing it on produces an
+        # episode that plays for one second. If any URL matched the caller's playlist patterns,
+        # those are the only ones worth keeping.
+        return playlist_urls or urls
 
     # -- interaction helpers -----------------------------------------------------------
 
@@ -627,7 +663,11 @@ class BrowserSniffer:
                 if not found and index == 0 and autoplay_media:
                     found = list(autoplay_media)
                 if found:
-                    out["episodes"][ep] = found
+                    # Keyed by string on purpose: this dict is serialised into run reports, and
+                    # an int key silently becomes a string there. Callers reading it by
+                    # ``str(ep)`` would then work only before the round trip -- which is exactly
+                    # how the adapter used to lose every sniffed URL.
+                    out["episodes"][str(ep)] = found
 
                 # Keep the raw play-API bodies per episode: they carry structured quality and
                 # entitlement flags, which is far more informative than a bare URL list.

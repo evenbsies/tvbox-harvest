@@ -152,6 +152,43 @@ def normalize_title(title: str | None) -> str:
     return re.sub(r"\s+", " ", text).strip().lower()
 
 
+#: Boilerplate these templates append to <title> so that the page ranks for a phrase rather
+#: than for the work. Stripped from the *display name* only; the dedupe fingerprint keeps
+#: using `normalize_title`, which already drops most of it.
+_NAME_NOISE = (
+    "免费在线观看",
+    "在线观看",
+    "免费观看",
+    "在线播放",
+    "免费播放",
+    "高清完整版",
+    "完整版",
+    "详情介绍",
+    "高清在线",
+)
+
+
+def strip_name_noise(name: str | None) -> str:
+    """Remove trailing marketing boilerplate from a display title.
+
+    Measured need: `<title>伦敦合伙人 免费在线观看 - 更新至第20261013期 - 综艺 - 追影</title>`
+    yields "伦敦合伙人 免费在线观看" once the site-name tail is gone. That string then becomes
+    the title a user sees in TVBox and the key the dedupe compares, so a stray suffix is not
+    cosmetic -- two spellings of the same work stop matching.
+    """
+    if not name:
+        return ""
+    text = name.strip()
+    changed = True
+    while changed:
+        changed = False
+        for suffix in _NAME_NOISE:
+            if text.endswith(suffix) and len(text) > len(suffix):
+                text = text[: -len(suffix)].strip(" -_|·・")
+                changed = True
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def extract_year(*candidates: str | None, fallback_text: str | None = None) -> int | None:
     """Year extraction, in priority order: explicit field, then bracketed, then bare."""
     for cand in candidates:

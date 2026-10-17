@@ -38,6 +38,9 @@ class RunOptions:
     since_hours: int | None = None
     max_titles: int | None = None
     max_requests: int | None = None
+    # Tier-4 episode ceiling is normally a recipe setting. A run-level override exists because a
+    # smoke test and a nightly harvest want very different ceilings against the same recipe.
+    max_episodes: int | None = None
     gateway_base: str = ""
     flavors: tuple[str, ...] = tvbox_mod.FLAVORS
     run_id: str = ""
@@ -223,6 +226,12 @@ def resolve_sites(options: RunOptions, settings: Settings) -> list[SiteConfig]:
             continue
         if options.tiers and site.tier() not in options.tiers:
             continue
+        if options.max_episodes is not None:
+            # Applied to the in-memory copy only; `save_recipe` never persists `budget`, so an
+            # override cannot silently become the recipe's new ceiling.
+            site = site.model_copy(
+                update={"budget": {**site.budget, "max_episodes_per_run": options.max_episodes}}
+            )
         configs.append(site)
     return configs
 

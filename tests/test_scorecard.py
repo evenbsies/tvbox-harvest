@@ -106,15 +106,19 @@ def test_a_media_playlist_declares_no_resolution() -> None:
 
 
 class _FakeResponse:
-    def __init__(self, text: str) -> None:
+    def __init__(self, text: str, content: bytes | None = None) -> None:
         self.text = text
+        self.content = content if content is not None else text.encode()
         self.status_code = 200
 
 
 class _FakeHttp:
-    """Records which URLs were fetched and answers with a canned body per URL."""
+    """Records which URLs were fetched and answers with a canned body per URL.
 
-    def __init__(self, bodies: dict[str, str], *, fail: set[str] | None = None) -> None:
+    Bodies may be ``bytes`` for binary payloads (a TS segment carrying an SPS).
+    """
+
+    def __init__(self, bodies: dict[str, str | bytes], *, fail: set[str] | None = None) -> None:
         self.bodies = bodies
         self.fail = fail or set()
         self.calls: list[str] = []
@@ -123,7 +127,10 @@ class _FakeHttp:
         self.calls.append(url)
         if url in self.fail:
             raise RuntimeError("boom")
-        return _FakeResponse(self.bodies.get(url, "#EXTM3U\n"))
+        body = self.bodies.get(url, "#EXTM3U\n")
+        if isinstance(body, bytes):
+            return _FakeResponse(body.decode("latin-1"), body)
+        return _FakeResponse(body)
 
 
 def _data(urls: list[str], *, per_title: int = 1) -> SiteData:
@@ -232,6 +239,76 @@ async def test_no_stream_resolves_to_none_not_to_zero() -> None:
     assert result["max_resolution"] is None
 
 
+# -- SPS fallback ----------------------------------------------------------------------------------
+
+
+def _media_playlist(name: str = "seg.ts") -> str:
+    return f"#EXTM3U\n#EXT-X-VERSION:3\n#EXTINF:1,\n{name}\n"
+
+
+def _ts_with_sps(hex_sps: str) -> bytes:
+    return b"\x00\x00\x01\x67" + bytes.fromhex(hex_sps) + b"\x00\x00\x01\x68\xee\x3c\x80"
+
+
+SP_1080P = "640028acd940780227e5c05a808080a0000003002000000641e30632c000"
+
+
+@pytest.mark.asyncio
+async def test_a_media_playlist_falls_back_to_the_sps() -> None:
+    """Most hosts serve a media playlist; without this, "4K" is unfalsifiable."""
+    data = _data(["https://cdn.test/a.m3u8"])
+    http = _FakeHttp(
+        {
+            "https://cdn.test/a.m3u8": _media_playlist(),
+            "https://cdn.test/seg.ts": _ts_with_sps(SP_1080P),
+        }
+    )
+
+    result = await _check_streams(data, http, SITE, limit=1)
+
+    assert result["with_resolution"] == 0  # nothing was declared
+    assert result["measured_by_sps"] == 1  # but it was measured
+    assert result["sps"] == {"1920x1080": 1}
+    assert result["max_resolution"] == "1920x1080"
+    assert result["is_4k"] is False
+    assert "https://cdn.test/seg.ts" in http.calls
+
+
+@pytest.mark.asyncio
+async def test_a_master_playlist_never_fetches_a_segment() -> None:
+    """One request per stream is the budget; the SPS route is only a fallback."""
+    data = _data(["https://cdn.test/a.m3u8"])
+    http = _FakeHttp(
+        {"https://cdn.test/a.m3u8": "#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1,RESOLUTION=3840x2160\nhi.m3u8\n"}
+    )
+
+    result = await _check_streams(data, http, SITE, limit=1)
+
+    assert result["with_resolution"] == 1
+    assert result["measured_by_sps"] == 0
+    assert result["max_resolution"] == "3840x2160"
+    assert result["is_4k"] is True
+    assert len(http.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_segment_stays_unmeasured() -> None:
+    """A CDN returning an error page is not evidence of a low resolution."""
+    data = _data(["https://cdn.test/a.m3u8"])
+    http = _FakeHttp(
+        {
+            "https://cdn.test/a.m3u8": _media_playlist(),
+            "https://cdn.test/seg.ts": b"<html>404</html>",
+        }
+    )
+
+    result = await _check_streams(data, http, SITE, limit=1)
+
+    assert result["measured_by_sps"] == 0
+    assert result["max_resolution"] is None
+    assert result["is_4k"] is None
+
+
 # -- freshness -------------------------------------------------------------------------------------
 
 
@@ -311,3 +388,50 @@ async def test_an_incomplete_probe_is_reported_as_unmeasured_not_as_unusable(
         "an unanswered probe was reported as a verdict on the site"
     )
     assert card.sampled == 0
+
+
+# -- recipes and the probe gate ---------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_a_pinned_recipe_is_measured_even_when_the_probe_is_inconclusive(monkeypatch) -> None:
+    """A recipe that names its adapter must not be gated on a probe it does not need.
+
+    Observed for real: zhuiying3.cc probes as `unknown` (the play address is created at runtime
+    and the detail page opens no player), while its recipe collects fine. Reporting "not
+    automatable" would have declared a working source unusable.
+    """
+    from harvest import scorecard as sc
+    from harvest.models import ProbeResult
+
+    async def fake_probe(site, http, **kwargs):  # noqa: ANN001, ARG001
+        return ProbeResult(tier=0, adapter="auto", status="unknown", evidence={})
+
+    collected = {"ran": False}
+
+    async def fake_collect(site, http, settings, **kwargs):  # noqa: ANN001, ARG001
+        collected["ran"] = True
+        from harvest.adapters.base import CollectContext
+        from harvest.models import SiteData
+
+        data = SiteData(site_key=site.key, site_name=site.name, base_url=site.base_url, adapter="playwright_sniff")
+        return data, CollectContext(settings=settings, http=http)
+
+    monkeypatch.setattr(sc, "run_probe", fake_probe)
+    monkeypatch.setattr(sc, "run_collect", fake_collect)
+    monkeypatch.setattr(sc, "_recipe_for_host", lambda base, settings: SITE.model_copy(update={"adapter": "playwright_sniff"}))
+    monkeypatch.setattr(sc, "scan_site_html", lambda text, base: _FakeScan())
+
+    card = await sc.score("https://s.test/", sample=1, streams=0)
+
+    assert collected["ran"] is True
+    assert not any("not automatable" in e for e in card.errors), card.errors
+    assert any("配方" in note for note in card.notes)
+
+
+class _FakeScan:
+    signals: list[str] = []
+    kinds: list[str] = []
+
+    def as_dict(self):
+        return {}

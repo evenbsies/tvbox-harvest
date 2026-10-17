@@ -28,7 +28,14 @@ from urllib.parse import urljoin, urlparse
 
 from harvest.adapters.base import CollectContext, empty_site_data, register
 from harvest.adapters.html_ssr import HREF_RE, HtmlSsrAdapter
-from harvest.clean.normalize import canon_media_url, extract_year, host_of, strip_html, swap_host
+from harvest.clean.normalize import (
+    canon_media_url,
+    extract_year,
+    host_of,
+    strip_html,
+    strip_name_noise,
+    swap_host,
+)
 from harvest.models import AltURL, Episode, Line, SiteConfig, SiteData, Vod, compute_sid
 from harvest.probe.signals import (
     EPISODE_ATTR_RE,
@@ -91,10 +98,23 @@ def parse_play_payload(text: str) -> dict[str, Any]:
     }
 
 
+#: Extensions that address a whole episode. `.ts` is deliberately absent: on HLS it is a
+#: numbered two-second fragment, and an episode pointing at one plays for two seconds.
+_EPISODE_ADDRESS_SUFFIXES = (".m3u8", ".mp4", ".m4v", ".flv", ".mkv", ".mov", ".webm", ".avi")
+
+
+def _is_episode_address(url: str) -> bool:
+    path = urlparse(url).path.lower()
+    return any(path.endswith(suffix) for suffix in _EPISODE_ADDRESS_SUFFIXES)
+
+
 @register
 class PlaywrightSniffAdapter:
     kind: ClassVar[str] = "playwright_sniff"
     tier: ClassVar[int] = 4
+    #: Set per run from ``browser.episode_link_pattern`` when the template exposes no
+    #: ``data-episode`` attributes and no episode count.
+    _episode_link_pattern: ClassVar[str | None] = None
 
     async def collect(self, site: SiteConfig, ctx: CollectContext) -> SiteData:
         data = empty_site_data(site, self.kind, self.tier)
@@ -128,6 +148,7 @@ class PlaywrightSniffAdapter:
         max_episodes = int(browser_cfg.get("max_episodes_per_title") or 40)
         follow_links = bool(browser_cfg.get("follow_links", True))
         per_episode_wait_ms = int(browser_cfg.get("per_episode_wait_ms") or 10000)
+        self._episode_link_pattern = browser_cfg.get("episode_link_pattern")
 
         from harvest.fetch.browser import BrowserSniffer
 
@@ -136,7 +157,7 @@ class PlaywrightSniffAdapter:
         paywalled_episodes = 0
         episodes_walked = 0
         titles_truncated = 0
-        async with BrowserSniffer() as sniffer:
+        async with BrowserSniffer(proxy=site.request.proxy) as sniffer:
             for url in detail_urls:
                 if ctx.expired or harvested >= max_titles or episodes_walked >= episode_budget:
                     break
@@ -149,7 +170,7 @@ class PlaywrightSniffAdapter:
                 if not title:
                     continue
 
-                available = self._episode_numbers(html)
+                available = self._episode_numbers(html, self._episode_link_pattern)
                 remaining = max(0, episode_budget - episodes_walked)
                 episode_numbers = available[: min(max_episodes, remaining)]
                 if not episode_numbers:
@@ -272,6 +293,9 @@ class PlaywrightSniffAdapter:
         """
         bodies: dict[str, list[str]] = result.get("episode_bodies") or {}
         sniffed: dict[str, list[str]] = result.get("episodes") or {}
+        # Tolerate both spellings: older traces (and hand-written tests) key this by int.
+        if any(not isinstance(k, str) for k in sniffed):
+            sniffed = {str(k): v for k, v in sniffed.items()}
 
         playable: dict[int, list[str]] = {}
         paywalled = 0
@@ -400,14 +424,32 @@ class PlaywrightSniffAdapter:
         # per-title rather than per-episode.
         title = re.split(r"\s*[-_|]\s*第\s*\d+\s*[集话]", title)[0]
         parts = re.split(r"\s*[-_|]\s*", title)
-        return (parts[0] if parts else title).strip()
+        return strip_name_noise(parts[0] if parts else title)
 
-    def _episode_numbers(self, html: str) -> list[int]:
+    def _episode_numbers(self, html: str, link_pattern: str | None = None) -> list[int]:
         numbers = sorted({int(n) for n in EPISODE_ATTR_RE.findall(html)})
         if not numbers:
             counts = [int(n) for n in EPISODE_COUNT_RE.findall(html)]
             if counts:
                 numbers = list(range(1, max(counts) + 1))
+        if not numbers and link_pattern:
+            # Some templates carry neither `data-episode` nor an episode count: the *only* trace
+            # of the episode list is one anchor per episode. The pattern is declarative (a recipe
+            # setting) rather than hard-coded, so no template's URL shape gets baked into src/.
+            try:
+                rx = re.compile(link_pattern)
+            except re.error:
+                return []
+            found = set()
+            for match in rx.finditer(html):
+                raw = match.groupdict().get("ep") or (match.group(1) if match.groups() else None)
+                if raw is None:
+                    continue
+                try:
+                    found.add(int(raw))
+                except (TypeError, ValueError):
+                    continue
+            numbers = sorted(found)
         if not numbers:
             return []
         # Episode numbering on these sites starts at 1 but is not always contiguous.
@@ -433,6 +475,13 @@ class PlaywrightSniffAdapter:
                 absolute = self._absolutize(raw, fallback_hosts)
                 if not absolute:
                     continue
+                if not _is_episode_address(absolute):
+                    # Measured on zhuiying3.cc: two of six episodes caught only
+                    # `.../0000002.ts` -- one second of video -- because the playlist request
+                    # fell outside the observation window. Publishing that would look like a
+                    # working episode and stop after the first second. An absent episode is a
+                    # smaller lie than a broken one.
+                    continue
                 canonical = canon_media_url(absolute)
                 if canonical not in urls:
                     urls.append(canonical)
@@ -453,8 +502,11 @@ class PlaywrightSniffAdapter:
                     if alt != primary and all(a.url != alt for a in alts):
                         alts.append(AltURL(url=alt, host=host, note="alts"))
 
+            # The source's own episode number, not a running counter: when an episode has to be
+            # dropped (see the fragment check above) a counter would silently shift every
+            # later episode down one, so `第03集` would carry the address of episode 4.
             episodes.append(
-                Episode(index=len(episodes) + 1, name=f"第{ep:02d}集", url=primary, alts=alts)
+                Episode(index=ep, name=f"第{ep:02d}集", url=primary, alts=alts)
             )
 
         if not episodes:
@@ -486,7 +538,15 @@ class PlaywrightSniffAdapter:
     def _vid_from_url(self, url: str, site_key: str) -> str:
         path = urlparse(url).path
         segments = [s for s in path.split("/") if s]
-        return segments[-1] if segments else site_key
+        if not segments:
+            return site_key
+        last = segments[-1]
+        # `/video/XWpZYC61BZ.html` -> `XWpZYC61BZ`. Keeping the extension produced ids like
+        # "XWpZYC61BZ.html", which are not the ids any request accepts.
+        stem, dot, ext = last.rpartition(".")
+        if dot and ext.lower() in {"html", "htm", "shtml", "php", "aspx"}:
+            return stem or last
+        return last
 
     async def _get_text(self, url: str, site: SiteConfig, ctx: CollectContext) -> str:
         try:

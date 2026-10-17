@@ -162,3 +162,31 @@ def _alt(url: str):
     from harvest.models import AltURL
 
     return AltURL(url=url, host="mirror.b.com", note="alts")
+
+
+# -- display-name noise ----------------------------------------------------------------------
+
+
+def test_marketing_suffix_is_stripped_from_the_display_name() -> None:
+    """`伦敦合伙人 免费在线观看` is not the title of anything; it is an SEO phrase."""
+    from harvest.clean.normalize import strip_name_noise
+
+    assert strip_name_noise("伦敦合伙人 免费在线观看") == "伦敦合伙人"
+    assert strip_name_noise("沙丘 高清完整版") == "沙丘"
+    assert strip_name_noise("繁花 详情介绍") == "繁花"
+
+
+def test_a_name_that_is_only_noise_survives() -> None:
+    """Stripping must not produce an empty name -- that would break the title entirely."""
+    from harvest.clean.normalize import strip_name_noise
+
+    assert strip_name_noise("在线观看") == "在线观看"
+    assert strip_name_noise("") == ""
+    assert strip_name_noise(None) == ""
+
+
+def test_ordinary_names_are_left_alone() -> None:
+    from harvest.clean.normalize import strip_name_noise
+
+    assert strip_name_noise("伦敦合伙人") == "伦敦合伙人"
+    assert strip_name_noise("The Bear") == "The Bear"

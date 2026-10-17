@@ -1,0 +1,123 @@
+# Tier-4 recipe: measured on 2026-10-17, not guessed.
+#
+# What the reconnaissance established:
+#
+#   * Catalogue and detail pages are server-rendered. The homepage carries 146 distinct
+#     /video/{id}.html links, category pages (/vodtype/dianying.html etc.) 140 each, so listing
+#     discovery needs no browser.
+#   * /api.php/provide/vod/ answers **200 with HTML**, not JSON, on three path variants. That is a
+#     soft 404 with the status line rewritten -- Tier 1 is ruled out even though the site is a
+#     MacCMS-family template (`var maccms = {...}`, /voddetail-style routes replaced by
+#     /video/{id} and /play/{vid}-{line}-{ep}).
+#   * Detail pages DO carry the whole episode list statically: 92 `/play/{vid}-1-{n}.html` links
+#     on the sampled title. But **no `.m3u8` appears in any static response** -- the play page
+#     loads artplayer + hls.js and fetches a signed address through /v6/js/player.js (md5.min.js
+#     is loaded for the signature). So Tier 3 can only ever return play-page URLs here, which a
+#     TVBox client cannot play. Tier 4 is the only route to a real media URL.
+#   * The play page is NOT auto-opened by the detail page: a plain load of the detail URL produced
+#     zero media requests. Clicking `a.btn-play` navigates to /play/{vid}-1-1.html and the media
+#     request follows. That is why `click_selector` is a class here, unlike 4kvm's
+#     `[data-episode="{ep}"]`.
+#   * Measured result of that click: `https://del.mt320.com/Vtche/BF/4069376166.m3u8`, whose
+#     segments are served from `bfeng11.com`. Both are recorded as fallback hosts below.
+#   * The playlist is a **media** playlist with no `RESOLUTION=`. The real picture size therefore
+#     has to come from the stream: `harvest scorecard` reads the H.264 SPS of the first segment
+#     (see harvest/probe/h264.py). Sampled: 1920x1080 -- despite the site's "蓝光高清" wording.
+#   * Pagination is soft: /vodtype/{cat}/page/2.html returns the same list as page 1 (diff of 14
+#     bytes). `max_pages: 1` is the honest setting; asking for more would only re-crawl the same
+#     titles.
+#   * `og:url` advertises a mirror (zhuiying1.cc); the canonical host used here is the one that
+#     responded.
+#
+# COMPLIANCE: aggregated catalogue of third-party titles, no licence relationship to the content.
+# Disabled by default, index-only, no media relayed. Enable only if harvesting it is lawful where
+# you are -- see COMPLIANCE.md.
+
+key: zhuiying
+name: 追影
+base_url: https://zhuiying3.cc
+adapter: playwright_sniff
+enabled: false
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Aggregated third-party catalogue. Index-only: addresses are recorded, nothing is downloaded,
+    re-hosted or relayed.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0
+      Safari/537.36"
+    Referer: "{base_url}/"
+    Accept-Language: "zh-CN,zh;q=0.9"
+  rate_limit: 0.5          # browser-driven crawl: stay gentle
+  timeout: 25
+  retries: 2
+  respect_robots: true
+  delay_jitter: 0.5
+
+listing:
+  max_pages: 1             # pagination is soft; more pages only re-crawl the same titles
+  pages:
+    url: "/vodtype/{cat}.html"
+    item: "a[href^='/video/']"
+  categories:
+    - {id: dianying, name: 电影}
+    - {id: dianshiju, name: 剧集}
+    - {id: dongman, name: 动漫}
+    - {id: zongyi, name: 综艺}
+    - {id: duanju, name: 短剧}
+
+browser:
+  wait_until: domcontentloaded
+  # The detail page does not start the player by itself: a plain load produced zero media
+  # requests. Each episode has its own play page and the detail page links every one of them
+  # (`/play/{vid}-{line}-{ep}.html`, 92 links on the sampled title), so `{ep}` selects the
+  # anchor to navigate to. `*=` rather than `$=` because the line number is in the middle and
+  # a title can have several lines.
+  click_selector: "a[href*='-1-{ep}.html']"
+  # No `data-episode` attributes and no "共N集" text: the episode list exists only as anchors.
+  episode_link_pattern: 'href="/play/[^"\s]+-1-(?P<ep>\d+)\.html"'
+  sniff_patterns:
+    - \.m3u8
+    - /m3u8/
+  capture_body_patterns:
+    - /play/
+  fallback_hosts:
+    # Observed, not inferred: media host and the CDN its segments point at.
+    - del.mt320.com
+    - bfeng11.com
+  follow_links: true
+  per_title_timeout: 45
+  per_episode_wait_ms: 12000
+  max_episodes_per_title: 40
+
+budget:
+  max_titles_per_run: 30
+  max_episodes_per_run: 120     # hard stop for the whole run
+  concurrency: 1                # one browser session per site
+  keep_traces: 2
+
+tvbox:
+  type: 1
+  searchable: 1
+  quickSearch: 1
+  filterable: 0
+
+detect:
+  version: 1
+  result: playwright_sniff
+  tier: 4
+  status: ok
+  stale: false
+  evidence: {}
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  page_limit: 20
+  max_pages: 40
+  incremental_hours: 24
+selectors: {}
+probe: {}

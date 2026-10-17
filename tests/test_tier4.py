@@ -129,6 +129,30 @@ class TestInterpret:
         result = {"episode_bodies": {"1": [FREE_AND_VIP], "2": [FREE_AND_VIP]}, "episodes": {}}
         assert self._interpret(result, [1, 2])["locked_qualities"] == 2
 
+    def test_integer_episode_keys_still_resolve(self):
+        """Regression: the sniffer once keyed this dict by int, the adapter read ``str(ep)``.
+
+        Every sniffed URL was therefore dropped, the title was reported as "empty", and the
+        report said the site had no playable episodes -- for a site that demonstrably did. The
+        bug only appeared against a live browser; the unit tests all used string keys.
+        """
+        result = {
+            "episode_bodies": {},
+            "episodes": {1: ["https://cdn.example.net/a/1.m3u8"], 2: ["https://cdn.example.net/a/2.m3u8"]},
+        }
+        parsed = self._interpret(result, [1, 2])
+        assert parsed["playable"][1] == ["https://cdn.example.net/a/1.m3u8"]
+        assert parsed["playable"][2] == ["https://cdn.example.net/a/2.m3u8"]
+
+    def test_the_sniffer_keys_episodes_by_string(self):
+        """The source of that bug, pinned where it is produced rather than where it hurt."""
+        import inspect
+
+        from harvest.fetch import browser
+
+        source = inspect.getsource(browser)
+        assert 'out["episodes"][str(ep)] = found' in source
+
 
 class TestBuildLine:
     def _adapter(self):
@@ -161,3 +185,79 @@ class TestBuildLine:
 
     def test_no_playable_episodes_yields_no_line(self):
         assert self._adapter()._build_line({"playable": {}, "literals": []}, ["a.example"]) is None
+
+
+class TestSegmentVersusPlaylist:
+    """A one-second fragment is not an episode address.
+
+    Measured on zhuiying3.cc: alongside the playlist the player also fetched
+    `/video/lundunhehuoren/.../0000002.ts`. That response matches on content-type
+    (``video/mp2t``) even though it matches none of the URL patterns, so an unfiltered
+    ``_extract_media`` returned it as episode 3 -- a title whose third episode would play for
+    exactly one second before ending.
+    """
+
+    @staticmethod
+    def _item(url: str, content_type: str):
+        from harvest.fetch.browser import SniffedResponse
+
+        return SniffedResponse(url=url, status=200, content_type=content_type, resource_type="xhr", method="GET")
+
+    def test_a_playlist_wins_over_a_segment(self):
+        import re
+
+        from harvest.fetch.browser import BrowserSniffer
+
+        matched = [
+            self._item("https://cdn.test/a/1.m3u8", "application/vnd.apple.mpegurl"),
+            self._item("https://cdn.test/a/0000002.ts", "video/mp2t"),
+        ]
+        urls = BrowserSniffer._extract_media(matched, [re.compile(r"\.m3u8")])  # noqa: SLF001
+        assert urls == ["https://cdn.test/a/1.m3u8"]
+
+    def test_a_segment_is_kept_when_it_is_all_there_is(self):
+        """Some hosts serve progressive mp4/ts only; dropping those would lose the site."""
+        import re
+
+        from harvest.fetch.browser import BrowserSniffer
+
+        matched = [self._item("https://cdn.test/a/full.ts", "video/mp2t")]
+        urls = BrowserSniffer._extract_media(matched, [re.compile(r"\.m3u8")])  # noqa: SLF001
+        assert urls == ["https://cdn.test/a/full.ts"]
+
+
+def test_vid_drops_a_page_extension():
+    """`/video/XWpZYC61BZ.html` is the page; the id is `XWpZYC61BZ`."""
+    from harvest.adapters.playwright_sniff import PlaywrightSniffAdapter
+
+    adapter = PlaywrightSniffAdapter()
+    assert adapter._vid_from_url("https://s.test/video/XWpZYC61BZ.html", "s") == "XWpZYC61BZ"  # noqa: SLF001
+    assert adapter._vid_from_url("https://s.test/v/abc123", "s") == "abc123"  # noqa: SLF001
+    assert adapter._vid_from_url("https://s.test/", "s") == "s"  # noqa: SLF001
+
+
+def test_a_ts_fragment_is_not_an_episode_address():
+    """A playlist or a container file is an address; a numbered fragment is not."""
+    from harvest.adapters.playwright_sniff import _is_episode_address
+
+    assert _is_episode_address("https://cdn.test/a/1.m3u8?sign=x")
+    assert _is_episode_address("https://cdn.test/a/full.mp4")
+    assert _is_episode_address("https://cdn.test/a/full.mkv")
+    assert not _is_episode_address("https://cdn.test/video/x/0000002.ts")
+    assert not _is_episode_address("https://cdn.test/video/x/seg.m4s")
+
+
+def test_build_line_drops_an_episode_whose_only_address_is_a_fragment():
+    """Six walked, one unusable: the line keeps five episodes rather than shipping a 2s one."""
+    from harvest.adapters.playwright_sniff import PlaywrightSniffAdapter
+
+    parsed = {
+        "playable": {
+            1: ["https://del.test/Vtche/BF/4069376166.m3u8"],
+            2: ["https://cdn.test/video/x/0000002.ts"],
+            3: ["https://del.test/Vtche/BF/3513919350.m3u8"],
+        }
+    }
+    line = PlaywrightSniffAdapter()._build_line(parsed, ["bfeng11.com", "del.test"])  # noqa: SLF001
+    assert line is not None
+    assert [e.index for e in line.episodes] == [1, 3]

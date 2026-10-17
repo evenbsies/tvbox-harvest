@@ -350,7 +350,7 @@ async def _probe_tier4(
         return None
 
     try:
-        async with BrowserSniffer() as sniffer:
+        async with BrowserSniffer(proxy=site.request.proxy) as sniffer:
             result = await sniffer.sniff(
                 sample_url,
                 sniff_patterns=list(sniff_patterns),
