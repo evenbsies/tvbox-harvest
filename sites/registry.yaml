@@ -23,15 +23,15 @@ sites:
   base_url: https://tv.lxyy.club
   adapter: json_custom
   tier: 2
-  enabled: false
+  enabled: true
   origin:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-17T08:20:24+00:00'
+    at: '2026-10-17T08:54:24+00:00'
     status: ok
-    vods: 7
-    lines: 7
+    vods: 16
+    lines: 16
     filtered: 10
 - key: pianku
   name: 片库
@@ -41,7 +41,8 @@ sites:
   enabled: false
   origin:
     type: manual
-    note: Tier-3 validation; collection API returns `closed`, play lines are tab-labelled
+    note: Tier-3 validation; collection API returns `closed`, play lines are 
+      tab-labelled
   last_run:
     at: '2026-10-17T04:24:10+00:00'
     status: ok
@@ -53,11 +54,11 @@ sites:
   base_url: https://zhuiying3.cc
   adapter: playwright_sniff
   tier: 4
-  enabled: false
+  enabled: true
   origin:
     type: manual
-    note: Tier-4 validation with an anchor-based episode list; 1080p measured from
-      SPS
+    note: Tier-4 validation with an anchor-based episode list; 1080p measured 
+      from SPS
   last_run:
     at: '2026-10-17T03:19:00+00:00'
     status: degraded

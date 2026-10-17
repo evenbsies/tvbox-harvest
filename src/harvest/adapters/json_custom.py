@@ -77,6 +77,14 @@ class JsonCustomAdapter:
             return self._finalize(data, ctx)
 
         categories = [str(c) for c in ((site.probe or {}).get("categories") or [])]
+        # A site that can only be queried by keyword has a coverage problem that no amount of
+        # hand-written keywords solves: the list goes stale the day after it is written. If the
+        # recipe declares where the site publishes its own chart, read the titles from there and
+        # use them as keywords. Provenance stays with the site; the recipe only says where to look.
+        discovered = await self._discover_keywords(site, ctx)
+        if discovered:
+            categories = list(dict.fromkeys([*categories, *discovered]))
+            ctx.stats["keywords_total"] = len(categories)
         max_pages = int(fields.get("max_pages") or site.maccms.max_pages)
         raw_items: list[dict[str, Any]] = []
 
@@ -119,6 +127,49 @@ class JsonCustomAdapter:
         return {k: v for k, v in entry.items() if v not in (None, "")}
 
     # -- internals ---------------------------------------------------------------------
+
+    async def _discover_keywords(self, site: SiteConfig, ctx: CollectContext) -> list[str]:
+        """Titles to use as search keywords, read from the site's own chart.
+
+        Declared as `probe.keyword_source: {url, path, limit}`. Returns [] when the recipe does
+        not declare one, or when the chart request fails -- a missing chart must degrade to "the
+        hand-written keywords only", never to an empty run.
+        """
+        spec = (site.probe or {}).get("keyword_source") or {}
+        if not isinstance(spec, dict) or not spec.get("url"):
+            return []
+        url = self._render(str(spec["url"]), site, {})
+        try:
+            resp = await ctx.require_http().get(url, site=site, tolerate=(403, 404, 500))
+        except Exception as exc:
+            ctx.note_error("json_custom:keywords", f"{url}: {exc}")
+            return []
+        if resp.status_code != 200 or not looks_like_json(resp):
+            ctx.note_error("json_custom:keywords", f"HTTP {resp.status_code} {url}")
+            return []
+        payload = safe_json(resp)
+        if payload is None:
+            return []
+        raw = jp_get(payload, str(spec.get("path") or ""))
+        # A keyword must be a scalar. `jp_tokens` silently *truncates* an unparseable path tail
+        # (`$.categories.*[*].name` tokenises to `['categories']`), so a typo resolves to a parent
+        # object instead of nothing -- and the whole dict then travels into the search URL
+        # percent-encoded. Rejecting non-strings turns a nonsense request into a visible error.
+        bad = [value for value in raw if not isinstance(value, str)]
+        if bad:
+            ctx.note_error(
+                "json_custom:keywords",
+                f"path {spec.get('path')!r} yielded {type(bad[0]).__name__}, not strings; "
+                "check the wildcard syntax",
+            )
+            return []
+        names = [value.strip() for value in raw if value.strip()]
+        unique = list(dict.fromkeys(names))
+        limit = int(spec.get("limit") or 0)
+        if limit > 0:
+            unique = unique[:limit]
+        ctx.stats["keywords_discovered"] = len(unique)
+        return unique
 
     async def _fetch(
         self, url: str, site: SiteConfig, ctx: CollectContext, fields: dict[str, Any]
@@ -177,39 +228,56 @@ class JsonCustomAdapter:
                 continue
 
             lines = self._episode_lines(item, fields)
+            detail: dict[str, Any] = {}
             if not lines:
                 detail_url = str(fields.get("detail_url") or "")
                 if detail_url:
-                    lines = await self._episode_lines_from_detail(
+                    lines, detail = await self._episode_lines_from_detail(
                         self._render(detail_url, site, {"id": vid, "vid": vid}), site, ctx, fields
                     )
 
-            cat = jp_str(item, str(fields.get("category") or ""))
+            def field(key: str, item: dict[str, Any] = item, detail: dict[str, Any] = detail) -> str:
+                """Read a field from the list item, falling back to the detail payload.
+
+                Search endpoints routinely return placeholder rows -- an empty `pic`, a missing
+                `content` -- and only the detail carries the real value. We already paid for the
+                detail request to get the episodes, so reading the same path from it costs
+                nothing. Without this, a site whose search API omits covers publishes a
+                subscription with no artwork at all, which reads as a broken source.
+                """
+                value = jp_str(item, str(fields.get(key) or ""))
+                if not value and detail:
+                    value = jp_str(detail, str(fields.get(key) or ""))
+                return value
+
+            cat = field("category")
             vods.append(
                 Vod(
                     site_key=site.key,
                     vid=vid,
                     sid=compute_sid(site.key, vid),
                     name=name,
-                    year=extract_year(jp_str(item, str(fields.get("year") or ""))),
+                    year=extract_year(field("year")),
                     cat_raw=[cat] if cat else [],
-                    remarks=jp_str(item, str(fields.get("remarks") or "")) or None,
-                    pic=jp_str(item, str(fields.get("pic") or "")) or None,
-                    content=strip_html(jp_str(item, str(fields.get("content") or ""))) or None,
+                    remarks=field("remarks") or None,
+                    pic=field("pic") or None,
+                    content=strip_html(field("content")) or None,
                     lines=lines,
-                    updated_at=jp_str(item, str(fields.get("updated_at") or "")) or None,
+                    updated_at=field("updated_at") or None,
                 )
             )
         return vods
 
     async def _episode_lines_from_detail(
         self, url: str, site: SiteConfig, ctx: CollectContext, fields: dict[str, Any]
-    ) -> list[Line]:
+    ) -> tuple[list[Line], dict[str, Any]]:
         items, payload = await self._fetch(url, site, ctx, fields)
         target = items[0] if items else payload
         if target is None:
-            return []
-        return self._episode_lines(target if isinstance(target, dict) else {}, fields)
+            return [], {}
+        return self._episode_lines(target if isinstance(target, dict) else {}, fields), (
+            target if isinstance(target, dict) else {}
+        )
 
     def _episode_lines(self, item: dict[str, Any], fields: dict[str, Any]) -> list[Line]:
         episodes_path = str(fields.get("episodes_path") or "")

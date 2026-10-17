@@ -14,7 +14,11 @@
 # therefore trusts the response body and ignores the declared content type.
 
 key: validation-lziapi
-name: 采集接口验证站
+# 名字改过一次：它原本叫「采集接口验证站」，因为最初是拿来验证 T1 通路是否成立的冒烟目标。
+# 问题是这个名字原封不动进了订阅，在播放器里看起来像谁忘了删的测试残留。它就是本来的样子
+# ——一个公开的 MacCMS 采集接口（cj.lziapi.com），内容与其它站一样是第三方聚合片源。
+# key 保持 `validation-lziapi`：它是订阅地址的一部分，改名等于让已订阅的人换链接。
+name: 聚合影视接口
 base_url: https://cj.lziapi.com
 adapter: maccms_v10
 enabled: true

@@ -52,6 +52,10 @@ fields:
   category: "$.type"
   remarks: "$.remarks"
   year: "$.year"
+  # 列表（search）返回的 pic 是空串，真正的封面只在详情里。路径必须从**根**写起——详情接口的
+  # 记录在 `details[0]`，和 episodes_path 同一个基准。适配器会在已经为「取剧集」付过详情请求
+  # 之后，用同一条表达式从详情回填缺字段，所以列表项读不到就自动落到详情上。
+  pic: "$.details[0].pic"
   detail_url: "{base_url}/api/proxy.php?action=detail&source=mj&id={id}"
   # 详情里是两层：details[0].episodes[*] 是线路分组，里面才是剧集。
   episodes_path: "$.details[0].episodes[*].episodes[*]"
@@ -60,14 +64,25 @@ fields:
   max_pages: 1
 
 probe:
-  # 关键词即「要抓什么」。按需增删；每多一个词就是一次列表 + N 次详情请求。
+  # 手工种子关键词。留着是因为榜单会轮换——这几个是「源上确实有 4K 标」的常青剧目。
   categories:
     - 庆余年
     - 繁花
+  keyword_source:
+    url: "{base_url}/api/proxy.php?action=home"
+    # 两级 `[*]`：第一级把 categories 这个**字典**的值（5 个分类的列表）拍平，第二级遍历
+    # 每个分类里的条目。写法必须用 `[*]` 而不是 `.*`——`.*` 会被分词器当成非法 token 静默
+    # 截断，路径退化成 `$.categories`，把整个字典当成一个关键词。
+    path: "$.categories[*][*].name"
+    limit: 60
+  # 网关地址写在配方里，站点自包含：不写的话，没设 HARVEST_GATEWAY 变量的运行会把这个站
+  # 按 gateway_not_configured 丢掉，而报告里只有一行 skipped。
   gateway: "https://tvbox.myeven.ccwu.cc"
 budget:
-  max_titles_per_run: 40
-  max_requests_per_site: 200
+  # 60 个关键词 = 60 次列表 + 命中条目的详情请求。上限抬高是因为关键词变多了，不是放宽：
+  # 超预算时报告写 titles_truncated，不会静默截断。
+  max_titles_per_run: 80
+  max_requests_per_site: 400
 
 tvbox:
   # 自定义 JSON 接口 TVBox 读不懂，必须经网关转写成 MacCMS 形状（与 T2 的其它站一致）。

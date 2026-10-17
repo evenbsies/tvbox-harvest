@@ -9,7 +9,7 @@ interface rejects with 「请输入关键词」).
 from __future__ import annotations
 
 from harvest.config import get_settings
-from harvest.pipeline import load_recipe
+from harvest.pipeline import load_recipe, load_registry
 
 
 def _recipe():
@@ -38,7 +38,16 @@ def test_episodes_are_read_from_the_nested_detail_path() -> None:
     assert site.fields["episodes_path"] == "$.details[0].episodes[*].episodes[*]"
 
 
-def test_the_recipe_is_disabled_by_default() -> None:
+def test_enabled_state_agrees_between_recipe_and_ledger() -> None:
+    """Enabling needs both files; disagreement is how a site silently stops being harvested.
+
+    `_harvest_enabled` requires the recipe *and* the ledger to say yes. Setting only the recipe
+    leaves the site out of `harvest plan`, so the scheduled run never touches it -- while an
+    explicit `--site <key>` still works, which masks the problem completely. That exact pair was
+    true here for a day.
+    """
     site = _recipe()
     assert site is not None
-    assert site.enabled is False
+    ledger = load_registry(get_settings()).find("lxyy-4k60")
+    assert ledger is not None
+    assert site.enabled is ledger.enabled

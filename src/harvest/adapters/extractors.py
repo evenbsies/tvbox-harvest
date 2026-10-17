@@ -408,6 +408,11 @@ def jp_get(obj: Any, path: str) -> list[Any]:
             if token == "*":
                 if isinstance(item, list):
                     nxt.extend(item)
+                elif isinstance(item, dict):
+                    # Dict wildcard: `$.categories.*[*]` is how you say "every list under every
+                    # key of categories" without knowing the key names. Sites group by category
+                    # with names as keys, so without this a chart endpoint is unreachable.
+                    nxt.extend(item.values())
             elif isinstance(token, int):
                 if isinstance(item, list) and -len(item) <= token < len(item):
                     nxt.append(item[token])
