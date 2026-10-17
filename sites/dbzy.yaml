@@ -1,0 +1,72 @@
+# Tier-1 recipe: 豆瓣资源 (dbzy.tv) 的公开苹果CMS V10 采集接口。
+#
+# 来源：LibreTV 生态的公开源订阅清单（LunaTV-config 的 api_site，67 个站里筛出来的）。
+# 筛选标准写在下面「实测」里——不是照抄清单，每个都当场验过。
+#
+# 实测（2026-10-17）：
+#   * total=147788，分类 53 项；抽样 40 条里落在「伦理/福利/写真」等分类的是 **0 条**。
+#   * `ac=detail&ids=` 正常返回，首条即有可播线路（见提交记录）。
+#   * 列表项**不带** `vod_play_url`，剧集由适配器按 20 个 id 一批走 `ac=detail&ids=` 取，
+#     所以成本是「页数 + 批数」，不是条数。
+#
+# 合规说明：T1 是**直连**，订阅里给的是对方站 api.php，本仓的 bc_filter 只作用于本地快照，
+# 管不到播放器。选源时已经人工确认该站分类表里没有成人分类；若日后出现，禁用本配方即可。
+#
+# 启用条件（两处都要改）：本文件 `enabled` 与 sites/registry.yaml 同 key 的 `enabled`。
+
+key: dbzy
+name: 豆瓣资源
+base_url: https://dbzy.tv
+adapter: maccms_v10
+enabled: true
+
+compliance:
+  policy: block_adult
+  bc_filter: true
+  notes: >-
+    Public MacCMS V10 collection endpoint discovered through the LibreTV source ecosystem.
+    Catalogue is third-party aggregated content; enabled with the operator's knowledge.
+
+request:
+  headers:
+    User-Agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0
+      Safari/537.36"
+    Referer: "{base_url}/"
+  rate_limit: 1.0
+  timeout: 20
+  retries: 3
+  respect_robots: true
+  delay_jitter: 0.3
+
+maccms:
+  api_path: /api.php/provide/vod/
+  categories_all: true
+  max_pages: 40
+  incremental_hours: 24
+  page_limit: 20
+
+budget:
+  # T1 是直连：播放器看到的是对方完整目录（147788 部），本地快照只用于搜索索引、自查与
+  # verify。所以这里不需要追大——800 部已经把首页和分类撑起来了，而每个 2000 部约 3MB，
+  # 会白白让仓库每天长几十 MB。
+  max_titles_per_run: 800
+  max_requests_per_site: 200
+
+tvbox:
+  searchable: 1
+  quickSearch: 1
+  filterable: 1
+  playerType: 2
+
+detect:
+  version: 1
+  result: maccms_v10
+  tier: 1
+  status: ok
+  stale: false
+  evidence:
+    notes:
+      - 'Probed 2026-10-17: total=147788, 53 classes, 0/40 sampled rows in adult categories.'
+browser: {}
+selectors: {}
+probe: {}
