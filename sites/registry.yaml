@@ -28,11 +28,11 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
-    status: ok
-    vods: 271
-    lines: 271
-    filtered: 29
+    at: '2026-10-20T21:44:43+00:00'
+    status: degraded
+    vods: 6
+    lines: 6
+    filtered: 294
 - key: pianku
   name: 片库
   base_url: https://4k01.pianku.online
@@ -90,11 +90,11 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 280
-    lines: 560
-    filtered: 12
+    vods: 271
+    lines: 542
+    filtered: 11
 - key: tyyszy
   name: 天涯影视
   base_url: https://tyyszyapi.com
@@ -105,7 +105,7 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈7.3 万，39 个常规分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
     vods: 113
     lines: 113
@@ -120,10 +120,10 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈11.6 万，44 个常规分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 187
-    lines: 374
+    vods: 190
+    lines: 380
     filtered: 1
 - key: ffzy
   name: 非凡影视
@@ -135,10 +135,10 @@ sites:
     type: manual
     note: LibreTV 老版默认源；total≈9.9 万；含伦理片分类（直连不过滤）
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 114
-    lines: 228
+    vods: 113
+    lines: 226
     filtered: 18
 - key: zy360
   name: 360资源
@@ -165,11 +165,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 280
-    lines: 560
-    filtered: 12
+    vods: 271
+    lines: 542
+    filtered: 11
 - key: mtzy
   name: 茅台资源
   base_url: https://mtzy.me
@@ -180,7 +180,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
     vods: 208
     lines: 415
@@ -195,7 +195,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈14万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
     vods: 246
     lines: 492
@@ -210,10 +210,10 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈12万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 113
-    lines: 113
+    vods: 91
+    lines: 91
     filtered: 3
 - key: jinyingzy
   name: 金鹰资源
@@ -225,10 +225,10 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 187
-    lines: 374
+    vods: 190
+    lines: 380
     filtered: 1
 - key: subozy
   name: 速播资源
@@ -240,10 +240,10 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
-    vods: 187
-    lines: 374
+    vods: 190
+    lines: 380
     filtered: 1
 - key: jszy
   name: 极速资源
@@ -255,7 +255,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: ok
     vods: 190
     lines: 380
@@ -270,7 +270,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈10万；抽样无成人分类
   last_run:
-    at: '2026-10-20T17:19:02+00:00'
+    at: '2026-10-20T21:44:43+00:00'
     status: failed
     vods: 0
     lines: 0
