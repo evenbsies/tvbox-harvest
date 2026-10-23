@@ -28,7 +28,7 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
     vods: 271
     lines: 271
@@ -90,11 +90,11 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 148
-    lines: 296
-    filtered: 14574
+    vods: 189
+    lines: 378
+    filtered: 13189
 - key: tyyszy
   name: 天涯影视
   base_url: https://tyyszyapi.com
@@ -105,10 +105,10 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈7.3 万，39 个常规分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 123
-    lines: 123
+    vods: 120
+    lines: 120
     filtered: 0
 - key: guangsu
   name: 光速资源
@@ -120,11 +120,11 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈11.6 万，44 个常规分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 187
-    lines: 374
-    filtered: 2
+    vods: 195
+    lines: 390
+    filtered: 3
 - key: ffzy
   name: 非凡影视
   base_url: https://ffzy5.tv
@@ -135,10 +135,10 @@ sites:
     type: manual
     note: LibreTV 老版默认源；total≈9.9 万；含伦理片分类（直连不过滤）
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 99
-    lines: 198
+    vods: 111
+    lines: 222
     filtered: 6
 - key: zy360
   name: 360资源
@@ -165,11 +165,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 148
-    lines: 296
-    filtered: 14574
+    vods: 189
+    lines: 378
+    filtered: 13189
 - key: mtzy
   name: 茅台资源
   base_url: https://mtzy.me
@@ -180,11 +180,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 146
-    lines: 292
-    filtered: 209
+    vods: 157
+    lines: 314
+    filtered: 212
 - key: dbzy
   name: 豆瓣资源
   base_url: https://dbzy.tv
@@ -195,11 +195,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈14万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 72
-    lines: 144
-    filtered: 15
+    vods: 66
+    lines: 132
+    filtered: 49
 - key: zuida
   name: 最大资源
   base_url: https://zuida.xyz
@@ -210,11 +210,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈12万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 119
-    lines: 119
-    filtered: 0
+    vods: 171
+    lines: 171
+    filtered: 2
 - key: jinyingzy
   name: 金鹰资源
   base_url: https://jinyingzy.com
@@ -225,11 +225,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 187
-    lines: 374
-    filtered: 2
+    vods: 194
+    lines: 388
+    filtered: 3
 - key: subozy
   name: 速播资源
   base_url: https://www.subozy.com
@@ -240,11 +240,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 187
-    lines: 374
-    filtered: 2
+    vods: 195
+    lines: 390
+    filtered: 3
 - key: jszy
   name: 极速资源
   base_url: https://jszyapi.com
@@ -255,11 +255,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: ok
-    vods: 187
-    lines: 374
-    filtered: 2
+    vods: 196
+    lines: 392
+    filtered: 3
 - key: p2100
   name: 飘零资源
   base_url: https://p2100.net
@@ -270,7 +270,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈10万；抽样无成人分类
   last_run:
-    at: '2026-10-22T21:45:34+00:00'
+    at: '2026-10-23T05:03:17+00:00'
     status: failed
     vods: 0
     lines: 0
