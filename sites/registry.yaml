@@ -28,7 +28,7 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
     vods: 271
     lines: 271
@@ -59,11 +59,11 @@ sites:
     note: Tier-4 validation with an anchor-based episode list; 1080p measured from
       SPS
   last_run:
-    at: '2026-10-28T09:49:38+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: degraded
-    vods: 1
-    lines: 1
-    filtered: 78
+    vods: 4
+    lines: 4
+    filtered: 0
 - key: 4kvm
   name: 4KVM
   base_url: https://www.4kvm.tv
@@ -90,11 +90,11 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 196
-    lines: 392
-    filtered: 15162
+    vods: 207
+    lines: 414
+    filtered: 266
 - key: tyyszy
   name: 天涯影视
   base_url: https://tyyszyapi.com
@@ -105,11 +105,11 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈7.3 万，39 个常规分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 145
-    lines: 145
-    filtered: 2
+    vods: 289
+    lines: 289
+    filtered: 11
 - key: guangsu
   name: 光速资源
   base_url: https://api.guangsuapi.com
@@ -120,11 +120,11 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈11.6 万，44 个常规分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 210
-    lines: 420
-    filtered: 1
+    vods: 291
+    lines: 582
+    filtered: 10
 - key: ffzy
   name: 非凡影视
   base_url: https://ffzy5.tv
@@ -135,10 +135,10 @@ sites:
     type: manual
     note: LibreTV 老版默认源；total≈9.9 万；含伦理片分类（直连不过滤）
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 101
-    lines: 202
+    vods: 298
+    lines: 596
     filtered: 6
 - key: zy360
   name: 360资源
@@ -165,11 +165,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 196
-    lines: 392
-    filtered: 15162
+    vods: 207
+    lines: 414
+    filtered: 266
 - key: mtzy
   name: 茅台资源
   base_url: https://mtzy.me
@@ -180,11 +180,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 171
-    lines: 342
-    filtered: 96
+    vods: 291
+    lines: 581
+    filtered: 16
 - key: dbzy
   name: 豆瓣资源
   base_url: https://dbzy.tv
@@ -195,11 +195,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈14万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 221
-    lines: 442
-    filtered: 120
+    vods: 291
+    lines: 581
+    filtered: 23
 - key: zuida
   name: 最大资源
   base_url: https://zuida.xyz
@@ -210,11 +210,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈12万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 109
-    lines: 109
-    filtered: 3
+    vods: 292
+    lines: 292
+    filtered: 8
 - key: jinyingzy
   name: 金鹰资源
   base_url: https://jinyingzy.com
@@ -225,11 +225,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 207
-    lines: 414
-    filtered: 1
+    vods: 294
+    lines: 588
+    filtered: 7
 - key: subozy
   name: 速播资源
   base_url: https://www.subozy.com
@@ -240,11 +240,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 207
-    lines: 414
-    filtered: 1
+    vods: 292
+    lines: 584
+    filtered: 23
 - key: jszy
   name: 极速资源
   base_url: https://jszyapi.com
@@ -255,11 +255,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: ok
-    vods: 213
-    lines: 426
-    filtered: 1
+    vods: 294
+    lines: 588
+    filtered: 7
 - key: p2100
   name: 飘零资源
   base_url: https://p2100.net
@@ -270,7 +270,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈10万；抽样无成人分类
   last_run:
-    at: '2026-10-29T05:58:25+00:00'
+    at: '2026-10-29T10:08:15+00:00'
     status: failed
     vods: 0
     lines: 0
