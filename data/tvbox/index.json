@@ -205,9 +205,15 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-40879579397",
-  "generated_at": "2026-10-29T13:14:41+00:00",
+  "version": "direct-40968737295",
+  "generated_at": "2026-10-29T22:54:19+00:00",
   "generated_by": "tvbox-harvest",
+  "_skipped": [
+    {
+      "key": "lxyy-4k60",
+      "reason": "no_api"
+    }
+  ],
   "_carried_over": [
     "p2100"
   ]
