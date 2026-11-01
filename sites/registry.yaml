@@ -28,11 +28,11 @@ sites:
     type: manual
     note: 洛雪TV 的 source=mj（4k60帧）单源；目录只能按关键词取，实测片源为 1080p
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
-    status: degraded
-    vods: 19
-    lines: 19
-    filtered: 1
+    at: '2026-11-01T22:11:14+00:00'
+    status: ok
+    vods: 271
+    lines: 271
+    filtered: 29
 - key: pianku
   name: 片库
   base_url: https://4k01.pianku.online
@@ -90,11 +90,11 @@ sites:
     issue: 2
     at: '2026-10-17T02:11:28+00:00'
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 113
-    lines: 226
-    filtered: 6757
+    vods: 203
+    lines: 406
+    filtered: 5859
 - key: tyyszy
   name: 天涯影视
   base_url: https://tyyszyapi.com
@@ -105,10 +105,10 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈7.3 万，39 个常规分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 101
-    lines: 101
+    vods: 97
+    lines: 97
     filtered: 3
 - key: guangsu
   name: 光速资源
@@ -120,10 +120,10 @@ sites:
     type: manual
     note: 公开 MacCMS V10 采集接口；total≈11.6 万，44 个常规分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 254
-    lines: 508
+    vods: 255
+    lines: 510
     filtered: 4
 - key: ffzy
   name: 非凡影视
@@ -135,11 +135,11 @@ sites:
     type: manual
     note: LibreTV 老版默认源；total≈9.9 万；含伦理片分类（直连不过滤）
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 92
-    lines: 184
-    filtered: 9
+    vods: 91
+    lines: 182
+    filtered: 6
 - key: zy360
   name: 360资源
   base_url: https://360zy.com
@@ -165,11 +165,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 113
-    lines: 226
-    filtered: 6757
+    vods: 203
+    lines: 406
+    filtered: 5859
 - key: mtzy
   name: 茅台资源
   base_url: https://mtzy.me
@@ -180,10 +180,10 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈15万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 119
-    lines: 238
+    vods: 112
+    lines: 224
     filtered: 27
 - key: dbzy
   name: 豆瓣资源
@@ -195,7 +195,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈14万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
     vods: 20
     lines: 40
@@ -210,11 +210,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈12万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 128
-    lines: 128
-    filtered: 2
+    vods: 122
+    lines: 122
+    filtered: 3
 - key: jinyingzy
   name: 金鹰资源
   base_url: https://jinyingzy.com
@@ -225,11 +225,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 254
-    lines: 508
-    filtered: 3
+    vods: 255
+    lines: 510
+    filtered: 4
 - key: subozy
   name: 速播资源
   base_url: https://www.subozy.com
@@ -240,10 +240,10 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 256
-    lines: 512
+    vods: 255
+    lines: 510
     filtered: 4
 - key: jszy
   name: 极速资源
@@ -255,11 +255,11 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈11万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: ok
-    vods: 260
-    lines: 520
-    filtered: 3
+    vods: 255
+    lines: 510
+    filtered: 4
 - key: p2100
   name: 飘零资源
   base_url: https://p2100.net
@@ -270,7 +270,7 @@ sites:
     type: manual
     note: LibreTV 源清单筛出；total≈10万；抽样无成人分类
   last_run:
-    at: '2026-11-01T13:40:59+00:00'
+    at: '2026-11-01T22:11:14+00:00'
     status: failed
     vods: 0
     lines: 0
