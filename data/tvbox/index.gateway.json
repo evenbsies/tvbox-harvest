@@ -235,12 +235,11 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "gateway-41398991493",
-  "generated_at": "2026-11-02T06:22:06+00:00",
+  "version": "gateway-41435188718",
+  "generated_at": "2026-11-02T11:33:30+00:00",
   "generated_by": "tvbox-harvest",
   "gateway": "https://tvbox.myeven.ccwu.cc",
   "_carried_over": [
-    "p2100",
-    "zhuiying"
+    "p2100"
   ]
 }
