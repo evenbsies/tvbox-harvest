@@ -235,13 +235,13 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "experimental-42345519155",
-  "generated_at": "2026-11-07T06:12:21+00:00",
+  "version": "experimental-42363186036",
+  "generated_at": "2026-11-07T10:21:59+00:00",
   "generated_by": "tvbox-harvest",
   "gateway": "https://tvbox.myeven.ccwu.cc",
   "_carried_over": [
     "dbzy",
-    "p2100",
-    "zhuiying"
+    "mtzy",
+    "p2100"
   ]
 }
