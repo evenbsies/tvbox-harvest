@@ -205,8 +205,8 @@
   "wallpaper": "",
   "ua": "",
   "requestHeader": {},
-  "version": "direct-45501705248",
-  "generated_at": "2026-11-24T22:35:59+00:00",
+  "version": "direct-45578825220",
+  "generated_at": "2026-11-25T08:48:12+00:00",
   "generated_by": "tvbox-harvest",
   "_skipped": [
     {
@@ -216,7 +216,6 @@
   ],
   "_carried_over": [
     "dbzy",
-    "jinyingzy",
     "mtzy",
     "p2100"
   ]
